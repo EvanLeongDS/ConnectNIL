@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-blue: #1f7ae0;
+  --brand-blue-light: #e0eeff;
+  --brand-blue-dark: #1a3a8a;
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}

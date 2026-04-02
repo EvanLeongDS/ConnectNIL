@@ -1,0 +1,134 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
+
+export default async function ConnectNILLandingPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return (
+    <div className="min-h-screen bg-white text-black dark:bg-[#0d1117] dark:text-white">
+
+      {/* ── Navbar ── */}
+      <nav className="sticky top-0 z-20 border-b border-black/5 bg-white/90 backdrop-blur dark:border-white/5 dark:bg-[#0d1117]/90">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
+
+          {/* Brand — links home */}
+          <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-white text-lg font-black shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white">
+              C
+            </div>
+            <div>
+              <div className="text-lg font-extrabold tracking-tight text-black dark:text-white">ConnectNIL</div>
+              <div className="text-xs uppercase tracking-[0.25em] text-black/45 dark:text-white/40">
+                Team Partnerships
+              </div>
+            </div>
+          </Link>
+
+          <div className="hidden items-center gap-10 md:flex">
+            <a href="#how-it-works" className="text-base font-semibold text-black/70 transition hover:text-black dark:text-white/70 dark:hover:text-white">
+              How it works
+            </a>
+            <a href="#about-us" className="text-base font-semibold text-black/70 transition hover:text-black dark:text-white/70 dark:hover:text-white">
+              About us
+            </a>
+            <Link href="/contact" className="text-base font-semibold text-black/70 transition hover:text-black dark:text-white/70 dark:hover:text-white">
+              Contact
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {user ? (
+              <Link href="/dashboard" className="rounded-full bg-[#1f7ae0] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02]">
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" className="rounded-full border border-black/15 bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-black hover:text-white dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white dark:hover:text-black">
+                  Login
+                </Link>
+                <Link href="/role" className="rounded-full bg-[#1f7ae0] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02]">
+                  Sign Up
+                </Link>
+              </>
+            )}
+            <ThemeToggle />
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Hero ── */}
+      <main className="mx-auto flex min-h-[calc(100vh-73px)] max-w-7xl items-center px-6 py-20 md:px-10 md:py-28">
+        <section className="w-full max-w-5xl">
+          <h1 className="max-w-5xl text-6xl font-black leading-[0.95] tracking-tight text-black dark:text-white sm:text-7xl md:text-8xl">
+            Creating NIL deals for those who want it.
+          </h1>
+
+          <p className="mt-8 max-w-4xl text-2xl leading-relaxed text-black/50 dark:text-white/55 md:text-3xl">
+            The platform that connects teams and brands around the world.
+          </p>
+
+          <div className="mt-10 flex flex-wrap items-center gap-4">
+            <Link href="/role" className="rounded-full bg-[#1f7ae0] px-7 py-3.5 text-base font-semibold text-white shadow-md transition hover:scale-[1.02]">
+              Get Started
+            </Link>
+            <Link href="/login" className="rounded-full border border-black/15 bg-white px-7 py-3.5 text-base font-semibold text-black transition hover:bg-black hover:text-white dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white dark:hover:text-black">
+              Sign In
+            </Link>
+          </div>
+        </section>
+      </main>
+
+      {/* ── How it works ── */}
+      <section id="how-it-works" className="mx-auto max-w-7xl px-6 pb-16 md:px-10">
+        <div className="mb-10">
+          <h2 className="text-3xl font-black tracking-tight text-black dark:text-[#93c5fd]">
+            Season-long partnerships made simpler.
+          </h2>
+        </div>
+        <div className="grid gap-6 md:grid-cols-3">
+          {[
+            {
+              title: "Teams join",
+              text: "Athletes and teams create profiles, opt in, and show brands what they bring to the table.",
+            },
+            {
+              title: "Brands connect",
+              text: "Sponsors discover structured team opportunities instead of managing dozens of individual deals.",
+            },
+            {
+              title: "Deals run smoothly",
+              text: "Contracts, deliverables, and payments are organized in one place across the full season.",
+            },
+          ].map((item) => (
+            <div
+              key={item.title}
+              className="rounded-3xl bg-[#dbeafe] p-7 dark:bg-[#1a2f5a]"
+            >
+              <h3 className="text-xl font-bold text-[#1f7ae0] dark:text-[#93c5fd]">{item.title}</h3>
+              <p className="mt-3 text-base leading-7 text-[#1f7ae0] dark:text-[#93c5fd]/80">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── About us ── */}
+      <section id="about-us" className="mx-auto max-w-7xl px-6 py-10 md:px-10 md:pb-20">
+        <div className="rounded-[2rem] bg-[#dbeafe] p-8 dark:bg-[#1a2f5a] md:p-10">
+          <h2 className="text-3xl font-black tracking-tight text-[#1f7ae0] dark:text-[#93c5fd]">About us</h2>
+          <p className="mt-4 max-w-4xl text-lg leading-8 text-[#1f7ae0] dark:text-[#93c5fd]/80">
+            The idea for ConnectNIL arose in Boston University&apos;s entrepreneurship course, where we were tasked with creating a startup that can solve a real-world problem. We believe ConnectNIL can help fill a gap in the NIL market by providing a platform for teams and brands to connect and manage their partnerships.
+          </p>
+          <p className="mt-4 max-w-4xl text-lg leading-8 text-[#1f7ae0] dark:text-[#93c5fd]/80">
+            ConnectNIL helps teams and brands build organized, season-long NIL partnerships without the chaos of fragmented one-off deals. We focus on making the process simpler, more transparent, and easier to manage for everyone involved.
+          </p>
+        </div>
+      </section>
+
+    </div>
+  );
+}

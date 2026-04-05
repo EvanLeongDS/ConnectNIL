@@ -1,15 +1,18 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
+
+export const dynamic = "force-dynamic";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Partnership {
   id: string;
   title: string;
-  deal_type: string;
+  deal_type: string | null;
   status: string;
-  value: number | null;
+  total_value: number | null;
   start_date: string | null;
   end_date: string | null;
   athlete_id: string | null;
@@ -31,6 +34,8 @@ const dealTypeLabel: Record<string, string> = {
   social_media: "Social Media",
   in_person: "In-Person",
   content_creation: "Content Creation",
+  events: "Events",
+  mixed: "Full Sponsorship",
 };
 
 const statusColor: Record<string, string> = {
@@ -57,9 +62,9 @@ export default async function BrandDashboard() {
 
   if (!profile) redirect("/onboarding/brand-manager");
 
-  const { data: partnerships } = await supabase
+  const { data: partnerships, error: partnershipsError } = await supabase
     .from("partnerships")
-    .select("id, title, deal_type, status, value, start_date, end_date, athlete_id, team_id")
+    .select("id, title, deal_type, status, total_value, start_date, end_date, athlete_id, team_id")
     .eq("brand_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -74,9 +79,9 @@ export default async function BrandDashboard() {
 
   const totalSpent = deals
     .filter((d) => d.status === "completed")
-    .reduce((s, d) => s + (d.value ?? 0), 0);
+    .reduce((s, d) => s + (d.total_value ?? 0), 0);
 
-  const activeSpend = activeDeals.reduce((s, d) => s + (d.value ?? 0), 0);
+  const activeSpend = activeDeals.reduce((s, d) => s + (d.total_value ?? 0), 0);
 
   // Campaign type breakdown from profile prefs
   const campaignTypes: string[] = profile.campaign_types ?? [];
@@ -86,6 +91,12 @@ export default async function BrandDashboard() {
       <DashboardNav role="brand-manager" name={profile.company_name ?? "Brand"} />
 
       <main className="mx-auto max-w-7xl px-6 py-10 md:px-10">
+        {partnershipsError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
+            <p className="font-semibold">Could not load your deals</p>
+            <p className="mt-1 text-red-700 dark:text-red-400">{partnershipsError.message}</p>
+          </div>
+        )}
 
         {/* ── Header ── */}
         <div className="mb-8">
@@ -210,7 +221,10 @@ export default async function BrandDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <MiniStat label="Active spend"   value={activeSpend > 0 ? formatCurrency(activeSpend) : "—"} />
                 <MiniStat label="Total spent"    value={totalSpent > 0 ? formatCurrency(totalSpent) : "—"} />
-                <MiniStat label="Pending offers" value={formatCurrency(pendingDeals.reduce((s, d) => s + (d.value ?? 0), 0))} />
+                <MiniStat
+                  label="Pending offers"
+                  value={formatCurrency(pendingDeals.reduce((s, d) => s + (d.total_value ?? 0), 0))}
+                />
                 <MiniStat label="Deals total"    value={String(deals.length)} />
               </div>
               {deals.length === 0 && (
@@ -220,12 +234,30 @@ export default async function BrandDashboard() {
               )}
             </Card>
 
-            {/* All deals */}
-            {deals.filter((d) => d.status !== "active").length > 0 && (
-              <Card title="All Campaigns">
+            {/* Pending proposals — link to full Deals page for view/edit */}
+            {pendingDeals.length > 0 && (
+              <Card title="Pending proposals">
+                <p className="mb-4 text-sm text-black/50 dark:text-white/40">
+                  Awaiting team review.{" "}
+                  <Link href="/dashboard/brand-dashboard/deals" className="font-semibold text-[#1f7ae0] hover:underline">
+                    Open Deals
+                  </Link>{" "}
+                  to view or edit.
+                </p>
+                <div className="space-y-3">
+                  {pendingDeals.map((deal) => (
+                    <DealRow key={deal.id} deal={deal} />
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* Completed / cancelled (pending has its own card above) */}
+            {deals.filter((d) => d.status !== "active" && d.status !== "pending").length > 0 && (
+              <Card title="Past & other campaigns">
                 <div className="space-y-3">
                   {deals
-                    .filter((d) => d.status !== "active")
+                    .filter((d) => d.status !== "active" && d.status !== "pending")
                     .map((deal) => (
                       <DealRow key={deal.id} deal={deal} />
                     ))}
@@ -277,25 +309,30 @@ function ProfileRow({ label, value }: { label: string; value?: string }) {
 
 function DealRow({ deal }: { deal: Partnership }) {
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-black/5 bg-[#f9fafb] px-4 py-3 dark:border-white/5 dark:bg-[#1c2333]">
+    <Link
+      href={`/dashboard/brand-dashboard/deals/${deal.id}`}
+      className="flex items-center gap-4 rounded-xl border border-black/5 bg-[#f9fafb] px-4 py-3 transition-colors hover:border-black/10 hover:bg-black/[0.02] dark:border-white/5 dark:bg-[#1c2333] dark:hover:border-white/10 dark:hover:bg-white/[0.03]"
+    >
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-black dark:text-white">{deal.title}</p>
         <p className="text-xs text-black/40 dark:text-white/35">
-          {dealTypeLabel[deal.deal_type] ?? deal.deal_type}
+          {(deal.deal_type && (dealTypeLabel[deal.deal_type] ?? deal.deal_type)) || "Deal"}
           {deal.team_id && " · Team deal"}
           {deal.athlete_id && !deal.team_id && " · Athlete deal"}
           {deal.start_date && ` · ${formatDate(deal.start_date)}`}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        {deal.value != null && (
-          <span className="text-sm font-semibold text-black dark:text-white">{formatCurrency(deal.value)}</span>
+        {deal.total_value != null && (
+          <span className="text-sm font-semibold text-black dark:text-white">
+            {formatCurrency(deal.total_value)}
+          </span>
         )}
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor[deal.status] ?? ""}`}>
           {deal.status}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 

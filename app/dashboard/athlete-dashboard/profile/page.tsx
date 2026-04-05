@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
+import ProfilePageActions from "@/components/profile/ProfilePageActions";
 
 export default async function AthleteProfilePage() {
   const supabase = await createClient();
@@ -27,23 +28,26 @@ export default async function AthleteProfilePage() {
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
       <DashboardNav role="athlete" name={`${profile.first_name} ${profile.last_name}`} />
       <main className="mx-auto max-w-3xl px-6 py-10 md:px-10">
-        <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">Athlete Profile</p>
-          <h1 className="mt-1 text-3xl font-black tracking-tight text-black dark:text-white">
-            {profile.first_name} {profile.last_name}
-          </h1>
-          <p className="mt-1 text-sm text-black/45 dark:text-white/40">
-            {profile.team} · {profile.school}
-          </p>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">Athlete Profile</p>
+            <h1 className="mt-1 text-3xl font-black tracking-tight text-black dark:text-white">
+              {profile.first_name} {profile.last_name}
+            </h1>
+            <p className="mt-1 text-sm text-black/45 dark:text-white/40">
+              {profile.team} · {profile.school}
+            </p>
+          </div>
+          <ProfilePageActions editHref="/dashboard/athlete-dashboard/profile/edit" />
         </div>
 
         {/* Completion bar */}
-        <div className="mb-6 rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/6 dark:bg-white/3">
+        <div className="mb-6 rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-semibold text-black dark:text-white">Profile completion</span>
             <span className="text-sm font-bold text-[#1f7ae0]">{pct}%</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-black/8 dark:bg-white/10">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-[#30363d]">
             <div className="h-full rounded-full bg-[#1f7ae0] transition-all" style={{ width: `${pct}%` }} />
           </div>
           {pct < 100 && (
@@ -98,12 +102,6 @@ export default async function AthleteProfilePage() {
               extra={profile.snapchat_followers ? `${profile.snapchat_followers.toLocaleString()} followers` : undefined}
             />
           </Section>
-        </div>
-
-        <div className="mt-8 rounded-2xl border border-dashed border-black/10 bg-white p-6 text-center dark:border-white/10 dark:bg-white/3">
-          <p className="text-sm font-medium text-black/50 dark:text-white/40">
-            Profile editing coming soon.
-          </p>
         </div>
       </main>
     </div>

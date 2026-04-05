@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
+import ProfilePageActions from "@/components/profile/ProfilePageActions";
 
 const dealTypeLabel: Record<string, string> = {
   social_media: "Social Media",
@@ -25,14 +26,17 @@ export default async function BrandProfilePage() {
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
       <DashboardNav role="brand-manager" name={profile.company_name} />
       <main className="mx-auto max-w-3xl px-6 py-10 md:px-10">
-        <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">Brand Profile</p>
-          <h1 className="mt-1 text-3xl font-black tracking-tight text-black dark:text-white">
-            {profile.company_name}
-          </h1>
-          <p className="mt-1 text-sm text-black/45 dark:text-white/40">
-            {profile.industry} · {profile.city}, {profile.state}
-          </p>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">Brand Profile</p>
+            <h1 className="mt-1 text-3xl font-black tracking-tight text-black dark:text-white">
+              {profile.company_name}
+            </h1>
+            <p className="mt-1 text-sm text-black/45 dark:text-white/40">
+              {profile.industry} · {profile.city}, {profile.state}
+            </p>
+          </div>
+          <ProfilePageActions editHref="/dashboard/brand-dashboard/profile/edit" />
         </div>
 
         <div className="space-y-5">
@@ -119,12 +123,6 @@ export default async function BrandProfilePage() {
               <p className="text-sm italic text-black/30 dark:text-white/25">No preferences set.</p>
             )}
           </Section>
-        </div>
-
-        <div className="mt-8 rounded-2xl border border-dashed border-black/10 bg-white p-6 text-center dark:border-white/10 dark:bg-[#161b27]">
-          <p className="text-sm font-medium text-black/50 dark:text-white/40">
-            Profile editing coming soon.
-          </p>
         </div>
       </main>
     </div>

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 
@@ -7,9 +8,9 @@ import DashboardNav from "@/components/dashboard/DashboardNav";
 interface Partnership {
   id: string;
   title: string;
-  deal_type: string;
+  deal_type: string | null;
   status: string;
-  value: number | null;
+  total_value: number | null;
   start_date: string | null;
   end_date: string | null;
   brand_id: string;
@@ -49,6 +50,7 @@ const dealTypeLabel: Record<string, string> = {
   social_media: "Social Media",
   events: "Events",
   content_creation: "Content Creation",
+  mixed: "Full Sponsorship",
 };
 
 const statusColor: Record<string, string> = {
@@ -78,9 +80,9 @@ export default async function AthleteDashboard() {
 
   if (!profile) redirect("/onboarding/athlete");
 
-  const { data: partnerships } = await supabase
+  const { data: partnerships, error: partnershipsError } = await supabase
     .from("partnerships")
-    .select("id, title, deal_type, status, value, start_date, end_date, brand_id")
+    .select("id, title, deal_type, status, total_value, start_date, end_date, brand_id")
     .eq("athlete_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -103,7 +105,7 @@ export default async function AthleteDashboard() {
 
   const totalEarned = deals
     .filter((d) => d.status === "completed" || d.status === "active")
-    .reduce((s, d) => s + (d.value ?? 0), 0);
+    .reduce((s, d) => s + (d.total_value ?? 0), 0);
 
   const completion = profileCompletion(profile as Record<string, unknown>);
 
@@ -112,6 +114,12 @@ export default async function AthleteDashboard() {
       <DashboardNav role="athlete" name={[profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Athlete"} />
 
       <main className="mx-auto max-w-7xl px-6 py-10 md:px-10">
+        {partnershipsError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
+            <p className="font-semibold">Could not load your deals</p>
+            <p className="mt-1 text-red-700 dark:text-red-400">{partnershipsError.message}</p>
+          </div>
+        )}
 
         {/* ── Header ── */}
         <div className="mb-8">
@@ -162,7 +170,7 @@ export default async function AthleteDashboard() {
                   <span>Profile completion</span>
                   <span className="font-semibold text-black dark:text-white">{completion}%</span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/8 dark:bg-white/10">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/10 dark:bg-[#30363d]">
                   <div
                     className="h-full rounded-full bg-[#1f7ae0] transition-all"
                     style={{ width: `${completion}%` }}
@@ -243,7 +251,7 @@ export default async function AthleteDashboard() {
                 <MiniStat
                   label="Pending payment"
                   value={formatCurrency(
-                    activeDeals.reduce((s, d) => s + (d.value ?? 0), 0)
+                    activeDeals.reduce((s, d) => s + (d.total_value ?? 0), 0)
                   )}
                 />
                 <MiniStat
@@ -272,7 +280,7 @@ export default async function AthleteDashboard() {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-black/6 bg-white p-6 shadow-sm dark:border-white/6 dark:bg-white/3">
+    <div className="rounded-2xl border border-black/6 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
       <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-black/40 dark:text-white/35">{title}</h2>
       {children}
     </div>
@@ -283,7 +291,7 @@ function StatCard({ label, value, sub, accent, warn }: {
   label: string; value: string; sub: string; accent?: boolean; warn?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/6 dark:bg-white/3">
+    <div className="rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
       <p className="text-xs font-medium text-black/40 dark:text-white/35">{label}</p>
       <p className={`mt-1 text-2xl font-black tracking-tight ${accent ? "text-[#1f7ae0]" : warn ? "text-amber-500" : "text-black dark:text-white"}`}>
         {value}
@@ -306,23 +314,28 @@ function ProfileRow({ label, value }: { label: string; value?: string }) {
 
 function DealRow({ deal }: { deal: Partnership }) {
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-black/5 bg-[#f9fafb] px-4 py-3 dark:border-white/5 dark:bg-white/3">
+    <Link
+      href={`/dashboard/athlete-dashboard/deals/${deal.id}`}
+      className="flex items-center gap-4 rounded-xl border border-black/5 bg-[#f9fafb] px-4 py-3 transition-colors hover:border-black/10 hover:bg-black/[0.02] dark:border-white/5 dark:bg-white/3 dark:hover:border-white/10 dark:hover:bg-white/[0.05]"
+    >
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-black dark:text-white">{deal.title}</p>
         <p className="text-xs text-black/40 dark:text-white/35">
-          {dealTypeLabel[deal.deal_type] ?? deal.deal_type}
+          {(deal.deal_type && (dealTypeLabel[deal.deal_type] ?? deal.deal_type)) || "Deal"}
           {deal.start_date && ` · Started ${formatDate(deal.start_date)}`}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        {deal.value && (
-          <span className="text-sm font-semibold text-black dark:text-white">{formatCurrency(deal.value)}</span>
+        {deal.total_value != null && deal.total_value > 0 && (
+          <span className="text-sm font-semibold text-black dark:text-white">
+            {formatCurrency(deal.total_value)}
+          </span>
         )}
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor[deal.status] ?? ""}`}>
           {deal.status}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 

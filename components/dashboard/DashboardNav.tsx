@@ -36,6 +36,7 @@ const navItems: Record<DashboardNavProps["role"], NavItem[]> = {
     { label: "Opportunities", href: "/dashboard/team-dashboard/opportunities" },
     { label: "Roster", href: "/dashboard/team-dashboard/roster" },
     { label: "Deals", href: "/dashboard/team-dashboard/deals" },
+    { label: "Profile", href: "/dashboard/team-dashboard/profile" },
   ],
 };
 
@@ -60,7 +61,10 @@ export default function DashboardNav({ role, name }: DashboardNavProps) {
         {/* Nav links */}
         <div className="flex items-center gap-1">
           {items.map((item) => {
-            const active = pathname === item.href;
+            const active =
+              pathname === item.href ||
+              (item.href.endsWith("/profile") && pathname.startsWith(`${item.href}/`)) ||
+              (item.href.endsWith("/deals") && pathname.startsWith(`${item.href}/`));
             return (
               <Link
                 key={item.href}

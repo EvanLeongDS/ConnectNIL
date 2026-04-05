@@ -17,6 +17,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const service = createServiceClient();
 
+    const companyDescription =
+      typeof body.company_description === "string" ? body.company_description.trim() : "";
+    if (companyDescription.length < 100) {
+      return NextResponse.json(
+        { error: "Company description must be at least 100 characters." },
+        { status: 400 }
+      );
+    }
+
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     if (!phone || !/^[\d\s\-().+]{7,15}$/.test(phone)) {
       return NextResponse.json({ error: "Valid phone number is required." }, { status: 400 });
@@ -87,7 +96,7 @@ export async function POST(request: NextRequest) {
       state: body.state,
       industry: body.industry,
       budget_range: body.budget_range,
-      company_description: body.company_description,
+      company_description: companyDescription,
       team_description: teamDescription,
       target_audience: body.target_audience,
       preferred_sports: sports,

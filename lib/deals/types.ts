@@ -29,6 +29,8 @@ export interface DealRow {
   end_date: string | null;
   brand_signed_at: string | null;
   team_signed_at: string | null;
+  brand_signer_name: string | null;
+  team_signer_name: string | null;
   created_at: string;
   updated_at: string;
 }

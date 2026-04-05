@@ -11,6 +11,8 @@ import {
   formatDate,
 } from "@/lib/deals/types";
 
+export const dynamic = "force-dynamic";
+
 interface Partnership {
   id: string;
   title: string;
@@ -36,9 +38,9 @@ export default async function TeamDealsPage() {
     .maybeSingle();
   if (!profile) redirect("/onboarding/team-manager");
 
-  const { data: rows } = await supabase
+  const { data: rows, error: dealsError } = await supabase
     .from("partnerships")
-    .select("id, title, deal_type, status, total_value, brand_display_name, season, start_date, end_date")
+    .select("id, title, deal_type, status, total_value, brand_display_name, season, start_date, end_date, created_at")
     .eq("team_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -58,6 +60,17 @@ export default async function TeamDealsPage() {
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
       <DashboardNav role="team-manager" name={`${profile.manager_first_name} ${profile.manager_last_name}`} />
       <main className="mx-auto max-w-5xl px-6 py-10 md:px-10">
+        {dealsError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
+            <p className="font-semibold">Could not load deals</p>
+            <p className="mt-1 text-red-700 dark:text-red-400">{dealsError.message}</p>
+            <p className="mt-2 text-xs text-red-600/90 dark:text-red-400/80">
+              Confirm Supabase migration <code className="rounded bg-red-100 px-1 dark:bg-red-900/40">011_deals_v2.sql</code> is applied so{" "}
+              <code className="rounded bg-red-100 px-1 dark:bg-red-900/40">total_value</code> and related columns exist.
+            </p>
+          </div>
+        )}
+
         <div className="mb-8">
           <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">Team Deals</p>
           <h1 className="mt-1 text-3xl font-black tracking-tight text-black dark:text-white">
@@ -125,12 +138,12 @@ export default async function TeamDealsPage() {
           );
         })}
 
-        {deals.length === 0 && (
+        {deals.length === 0 && !dealsError && (
           <div className="rounded-2xl border border-black/6 bg-white py-16 text-center shadow-sm dark:border-white/6 dark:bg-[#161b27]">
             <p className="text-4xl">🤝</p>
             <p className="mt-3 font-semibold text-black/60 dark:text-white/50">No brand deals yet</p>
             <p className="mt-1 text-sm text-black/35 dark:text-white/30">
-              Once a brand reaches out, deals will appear here.
+              When a brand sends a proposal to your team through Discover, it will appear here for review.
             </p>
           </div>
         )}

@@ -254,7 +254,7 @@ export default async function TeamDealDetailPage({ params }: Props) {
 
             {/* Signing info */}
             <ContractSection label="Signatures">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-black/35 dark:text-white/30">
                     Brand
@@ -262,9 +262,14 @@ export default async function TeamDealDetailPage({ params }: Props) {
                   <p className="mt-1 text-sm font-semibold text-black dark:text-white">
                     {d.brand_display_name ?? "—"}
                   </p>
+                  {d.brand_signer_name && (
+                    <p className="mt-1 text-sm text-black/70 dark:text-white/60">
+                      Signed: <span className="font-semibold text-black dark:text-white">{d.brand_signer_name}</span>
+                    </p>
+                  )}
                   {d.brand_signed_at && (
                     <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
-                      Signed {formatDate(d.brand_signed_at)}
+                      {formatDate(d.brand_signed_at)}
                     </p>
                   )}
                 </div>
@@ -276,11 +281,19 @@ export default async function TeamDealDetailPage({ params }: Props) {
                     {d.team_display_name ?? `${profile.school} ${profile.team_name}`}
                   </p>
                   {d.team_signed_at ? (
-                    <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
-                      Signed {formatDate(d.team_signed_at)}
-                    </p>
+                    <>
+                      {d.team_signer_name && (
+                        <p className="mt-1 text-sm text-black/70 dark:text-white/60">
+                          Signed:{" "}
+                          <span className="font-semibold text-black dark:text-white">{d.team_signer_name}</span>
+                        </p>
+                      )}
+                      <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
+                        {formatDate(d.team_signed_at)}
+                      </p>
+                    </>
                   ) : (
-                    <p className="mt-0.5 text-xs text-black/35 dark:text-white/30">Pending</p>
+                    <p className="mt-0.5 text-xs text-black/35 dark:text-white/30">Pending your signature</p>
                   )}
                 </div>
               </div>

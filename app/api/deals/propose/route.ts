@@ -1,21 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import type { DeliverableFrequency } from "@/lib/deals/types";
-
-const FREQUENCIES: DeliverableFrequency[] = [
-  "one_time",
-  "daily",
-  "weekly",
-  "monthly",
-  "season",
-];
-
-function parseFrequency(v: unknown): DeliverableFrequency {
-  if (typeof v === "string" && FREQUENCIES.includes(v as DeliverableFrequency)) {
-    return v as DeliverableFrequency;
-  }
-  return "one_time";
-}
+import { parseDeliverableFrequency } from "@/lib/deals/deliverableFrequency";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -50,6 +35,7 @@ export async function POST(request: NextRequest) {
     exclusivityClause,
     requiresOptIn,
     deliverables,
+    brandSignerName,
   } = body as {
     teamId?: string;
     title?: string;
@@ -64,6 +50,7 @@ export async function POST(request: NextRequest) {
     nilUseDescription?: string;
     exclusivityClause?: string;
     requiresOptIn?: boolean;
+    brandSignerName?: string;
     deliverables?: {
       title: string;
       description?: string;
@@ -75,12 +62,19 @@ export async function POST(request: NextRequest) {
   if (!teamId?.trim()) return NextResponse.json({ error: "Team is required." }, { status: 400 });
   if (!title?.trim()) return NextResponse.json({ error: "Title is required." }, { status: 400 });
   if (!paymentType) return NextResponse.json({ error: "Payment type is required." }, { status: 400 });
+  const signer = typeof brandSignerName === "string" ? brandSignerName.trim() : "";
+  if (signer.length < 2) {
+    return NextResponse.json(
+      { error: "Type your full name to sign as the brand representative." },
+      { status: 400 }
+    );
+  }
 
   const service = createServiceClient();
 
   const [{ data: brand }, { data: team }] = await Promise.all([
     service.from("brand_profiles").select("company_name").eq("id", user.id).maybeSingle(),
-    service.from("team_profiles").select("school, team_name").eq("id", teamId).maybeSingle(),
+    service.from("team_profiles").select("school, team_name, athlete_emails").eq("id", teamId).maybeSingle(),
   ]);
   if (!team) return NextResponse.json({ error: "Team not found." }, { status: 404 });
 
@@ -105,6 +99,7 @@ export async function POST(request: NextRequest) {
       status: "pending",
       proposed_by: user.id,
       brand_signed_at: new Date().toISOString(),
+      brand_signer_name: signer,
       brand_display_name: brand?.company_name ?? null,
       team_display_name: `${team.school} ${team.team_name}`,
       notes: null,
@@ -125,12 +120,36 @@ export async function POST(request: NextRequest) {
         title: d.title.trim(),
         description: d.description?.trim() || null,
         due_date: d.dueDate || null,
-        frequency: parseFrequency(d.frequency),
+        frequency: parseDeliverableFrequency(d.frequency),
         status: "pending",
       }));
     if (rows.length > 0) {
       const { error: dErr } = await service.from("deliverables").insert(rows);
       if (dErr) console.error("insert deliverables:", dErr);
+    }
+  }
+
+  const normEmail = (e: string) => e.trim().toLowerCase();
+  const rosterEmails = Array.from(
+    new Set(
+      (team.athlete_emails ?? []).map((e: unknown) => normEmail(String(e))).filter(Boolean)
+    )
+  );
+  if (rosterEmails.length > 0) {
+    const { data: profs } = await service.from("profiles").select("id, email").in("email", rosterEmails);
+    const ids = (profs ?? []).map((p) => p.id);
+    if (ids.length > 0) {
+      const { data: athleteRows } = await service.from("athlete_profiles").select("id").in("id", ids);
+      const athleteIds = (athleteRows ?? []).map((a) => a.id);
+      if (athleteIds.length > 0) {
+        const participantRows = athleteIds.map((athlete_id) => ({
+          partnership_id: partnership.id,
+          athlete_id,
+          status: "invited" as const,
+        }));
+        const { error: partErr } = await service.from("partnership_participants").insert(participantRows);
+        if (partErr) console.error("insert partnership_participants:", partErr);
+      }
     }
   }
 

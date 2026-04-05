@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
 
 export default async function ConnectNILLandingPage() {

@@ -10,66 +10,17 @@ import {
   formatCurrency,
   formatDate,
 } from "@/lib/deals/types";
-
-const SECTIONS = ["Partnership", "Compensation", "Timeline & NIL", "Deliverables", "Review"];
-
-const SEASONS = [
-  "Fall 2025",
-  "Spring 2026",
-  "Fall 2026",
-  "Spring 2027",
-  "Year-round 2026",
-  "Year-round 2027",
-];
-
-const DEAL_CATEGORIES = Object.entries(DEAL_CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }));
-
-const PAYMENT_OPTIONS = [
-  { value: "one_time", label: "One-time payment", desc: "Full amount paid at signing" },
-  { value: "monthly", label: "Monthly installments", desc: "Equal payments across the season" },
-  { value: "per_deliverable", label: "Per deliverable", desc: "Payment upon completion of each item" },
-];
-
-const DELIVERABLE_PRESETS = [
-  "Instagram post",
-  "Instagram story",
-  "TikTok post",
-  "Event appearance",
-  "Brand photo shoot",
-  "Custom",
-];
-
-const FREQUENCY_OPTIONS: {
-  value: DeliverableFrequency;
-  label: string;
-  hint: string;
-}[] = [
-  {
-    value: "weekly",
-    label: "Weekly",
-    hint: "Repeats every week for the term (e.g. weekly Instagram post).",
-  },
-  {
-    value: "daily",
-    label: "Daily",
-    hint: "Repeats every day during the term.",
-  },
-  {
-    value: "monthly",
-    label: "Monthly",
-    hint: "Repeats each month of the term.",
-  },
-  {
-    value: "season",
-    label: "Once for the season",
-    hint: "One obligation covering the full season (no fixed cadence).",
-  },
-  {
-    value: "one_time",
-    label: "One-time",
-    hint: "A single deliverable by an optional due date.",
-  },
-];
+import {
+  SECTIONS,
+  SEASONS,
+  DEAL_CATEGORIES,
+  PAYMENT_OPTIONS,
+  DELIVERABLE_PRESETS,
+  FREQUENCY_OPTIONS,
+  inputCls,
+  labelCls,
+  hintCls,
+} from "@/lib/deals/dealFormUi";
 
 interface AvailableTeam {
   id: string;
@@ -93,12 +44,6 @@ interface Props {
   preselectedTeamId?: string;
   preselectedTeamName?: string;
 }
-
-const inputCls =
-  "w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-black shadow-sm outline-none focus:border-[#1f7ae0] focus:ring-2 focus:ring-[#1f7ae0]/20 dark:border-white/10 dark:bg-[#1a2035] dark:text-white dark:placeholder:text-white/30 dark:focus:border-[#3d8ef0]";
-
-const labelCls = "block text-sm font-semibold text-black/70 dark:text-white/60";
-const hintCls = "mt-0.5 text-xs text-black/40 dark:text-white/30";
 
 function ProgressBar({ step, total }: { step: number; total: number }) {
   return (
@@ -147,6 +92,9 @@ export default function ProposeDealForm({ preselectedTeamId, preselectedTeamName
 
   // Step 4
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
+
+  // Step 5 — brand electronic signature
+  const [brandSignerName, setBrandSignerName] = useState("");
   const [delPreset, setDelPreset] = useState(DELIVERABLE_PRESETS[0]);
   const [delCustomTitle, setDelCustomTitle] = useState("");
   const [delDesc, setDelDesc] = useState("");
@@ -182,6 +130,10 @@ export default function ProposeDealForm({ preselectedTeamId, preselectedTeamName
     }
     if (s === 4) {
       if (deliverables.length === 0) return "Add at least one deliverable before continuing.";
+    }
+    if (s === 5) {
+      if (brandSignerName.trim().length < 2)
+        return "Type your full name to sign as the brand representative.";
     }
     return null;
   }
@@ -224,6 +176,11 @@ export default function ProposeDealForm({ preselectedTeamId, preselectedTeamName
   }
 
   async function handleSubmit() {
+    const signErr = validate(5);
+    if (signErr) {
+      setError(signErr);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -244,6 +201,7 @@ export default function ProposeDealForm({ preselectedTeamId, preselectedTeamName
           nilUseDescription: nilUseDescription.trim(),
           exclusivityClause: exclusivityClause.trim() || undefined,
           requiresOptIn,
+          brandSignerName: brandSignerName.trim(),
           deliverables: deliverables.map((d) => ({
             title: d.title,
             description: d.description || undefined,
@@ -671,6 +629,22 @@ export default function ProposeDealForm({ preselectedTeamId, preselectedTeamName
                   <li>• All terms are confidential.</li>
                   {requiresOptIn && <li>• Requires individual opt-in from each participating athlete.</li>}
                 </ul>
+              </Section>
+
+              <Section label="Brand signature">
+                <p className="mb-2 text-xs text-black/45 dark:text-white/35">
+                  By typing your name below, you electronically sign this proposal on behalf of your brand.
+                </p>
+                <label className={labelCls}>
+                  Full name
+                  <input
+                    className={`mt-1.5 ${inputCls}`}
+                    placeholder="e.g. Alex Rivera"
+                    value={brandSignerName}
+                    onChange={(e) => setBrandSignerName(e.target.value)}
+                    autoComplete="name"
+                  />
+                </label>
               </Section>
             </div>
           </div>

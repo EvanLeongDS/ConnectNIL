@@ -1,15 +1,18 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
+
+export const dynamic = "force-dynamic";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Partnership {
   id: string;
   title: string;
-  deal_type: string;
+  deal_type: string | null;
   status: string;
-  value: number | null;
+  total_value: number | null;
   start_date: string | null;
   end_date: string | null;
   brand_id: string;
@@ -30,6 +33,7 @@ const dealTypeLabel: Record<string, string> = {
   social_media: "Social Media",
   events: "Events",
   content_creation: "Content Creation",
+  mixed: "Full Sponsorship",
 };
 
 const statusColor: Record<string, string> = {
@@ -56,9 +60,9 @@ export default async function TeamDashboard() {
 
   if (!profile) redirect("/onboarding/team-manager");
 
-  const { data: partnerships } = await supabase
+  const { data: partnerships, error: partnershipsError } = await supabase
     .from("partnerships")
-    .select("id, title, deal_type, status, value, start_date, end_date, brand_id")
+    .select("id, title, deal_type, status, total_value, start_date, end_date, brand_id")
     .eq("team_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -69,7 +73,7 @@ export default async function TeamDashboard() {
   const athleteEmails: string[] = profile.athlete_emails ?? [];
   const totalEarned = deals
     .filter((d) => d.status === "completed")
-    .reduce((s, d) => s + (d.value ?? 0), 0);
+    .reduce((s, d) => s + (d.total_value ?? 0), 0);
 
   // "Athlete participation" = athletes invited / roster size
   const invitesSent     = athleteEmails.length;
@@ -85,6 +89,12 @@ export default async function TeamDashboard() {
       <DashboardNav role="team-manager" name={[profile.manager_first_name, profile.manager_last_name].filter(Boolean).join(" ") || "Team Manager"} />
 
       <main className="mx-auto max-w-7xl px-6 py-10 md:px-10">
+        {partnershipsError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
+            <p className="font-semibold">Could not load brand deals</p>
+            <p className="mt-1 text-red-700 dark:text-red-400">{partnershipsError.message}</p>
+          </div>
+        )}
 
         {/* ── Header ── */}
         <div className="mb-8">
@@ -271,23 +281,28 @@ function ProfileRow({ label, value }: { label: string; value?: string }) {
 
 function DealRow({ deal }: { deal: Partnership }) {
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-black/5 bg-[#f9fafb] px-4 py-3 dark:border-white/5 dark:bg-[#1c2333]">
+    <Link
+      href={`/dashboard/team-dashboard/deals/${deal.id}`}
+      className="flex items-center gap-4 rounded-xl border border-black/5 bg-[#f9fafb] px-4 py-3 transition-colors hover:border-black/10 hover:bg-black/[0.02] dark:border-white/5 dark:bg-[#1c2333] dark:hover:border-white/10 dark:hover:bg-white/[0.03]"
+    >
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-black dark:text-white">{deal.title}</p>
         <p className="text-xs text-black/40 dark:text-white/35">
-          {dealTypeLabel[deal.deal_type] ?? deal.deal_type}
+          {(deal.deal_type && (dealTypeLabel[deal.deal_type] ?? deal.deal_type)) || "Deal"}
           {deal.start_date && ` · ${formatDate(deal.start_date)}`}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        {deal.value != null && (
-          <span className="text-sm font-semibold text-black dark:text-white">{formatCurrency(deal.value)}</span>
+        {deal.total_value != null && (
+          <span className="text-sm font-semibold text-black dark:text-white">
+            {formatCurrency(deal.total_value)}
+          </span>
         )}
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor[deal.status] ?? ""}`}>
           {deal.status}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 

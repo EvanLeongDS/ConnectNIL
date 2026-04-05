@@ -412,6 +412,9 @@ export default function BrandManagerOnboardingPage() {
       if (!budgetRange) return "Please select a budget range.";
       if (targetAudience.length === 0) return "Please select at least one target audience.";
       if (!companyDescription.trim()) return "Please add a company description.";
+      if (companyDescription.trim().length < 100) {
+        return "Company description must be at least 100 characters.";
+      }
     }
     if (s === 3) {
       if (!teamDescription.trim()) return "Please describe your ideal collegiate team.";
@@ -716,7 +719,7 @@ export default function BrandManagerOnboardingPage() {
                 )}
               </Field>
 
-              <Field label="Company Description" required hint="max 300 characters">
+              <Field label="Company Description" required hint="100–300 characters">
                 <textarea
                   value={companyDescription}
                   onChange={(e) => setCompanyDescription(e.target.value.slice(0, 300))}
@@ -726,10 +729,17 @@ export default function BrandManagerOnboardingPage() {
                 />
                 <p
                   className={`text-right text-xs ${
-                    companyDescription.length >= 280 ? "text-red-500" : "text-black/30 dark:text-white/30"
+                    companyDescription.length >= 280
+                      ? "text-red-500"
+                      : companyDescription.trim().length > 0 && companyDescription.trim().length < 100
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-black/30 dark:text-white/30"
                   }`}
                 >
                   {companyDescription.length}/300
+                  {companyDescription.trim().length < 100 && (
+                    <span className="ml-2">(min 100)</span>
+                  )}
                 </p>
               </Field>
             </div>

@@ -5,9 +5,9 @@ import DashboardNav from "@/components/dashboard/DashboardNav";
 interface Partnership {
   id: string;
   title: string;
-  deal_type: string;
+  deal_type: string | null;
   status: string;
-  value: number | null;
+  total_value: number | null;
   start_date: string | null;
   end_date: string | null;
   athlete_id: string | null;
@@ -50,16 +50,18 @@ export default async function BrandCampaignsPage() {
     .maybeSingle();
   if (!profile) redirect("/onboarding/brand-manager");
 
-  const { data: rows } = await supabase
+  const { data: rows, error: loadError } = await supabase
     .from("partnerships")
-    .select("id, title, deal_type, status, value, start_date, end_date, athlete_id, team_id")
+    .select("id, title, deal_type, status, total_value, start_date, end_date, athlete_id, team_id")
     .eq("brand_id", user.id)
     .order("created_at", { ascending: false });
 
   const deals = (rows ?? []) as Partnership[];
 
-  const totalBudget = deals.reduce((s, d) => s + (d.value ?? 0), 0);
-  const spent       = deals.filter((d) => d.status === "completed").reduce((s, d) => s + (d.value ?? 0), 0);
+  const totalBudget = deals.reduce((s, d) => s + (d.total_value ?? 0), 0);
+  const spent = deals
+    .filter((d) => d.status === "completed")
+    .reduce((s, d) => s + (d.total_value ?? 0), 0);
 
   const statusGroups = ["active", "pending", "completed", "cancelled"] as const;
 
@@ -67,6 +69,12 @@ export default async function BrandCampaignsPage() {
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
       <DashboardNav role="brand-manager" name={profile.company_name} />
       <main className="mx-auto max-w-5xl px-6 py-10 md:px-10">
+        {loadError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
+            <p className="font-semibold">Could not load campaigns</p>
+            <p className="mt-1 text-red-700 dark:text-red-400">{loadError.message}</p>
+          </div>
+        )}
         <div className="mb-8 flex items-end justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">Brand Campaigns</p>
@@ -105,7 +113,7 @@ export default async function BrandCampaignsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-black dark:text-white">{deal.title}</p>
                       <p className="mt-0.5 text-sm text-black/40 dark:text-white/35">
-                        {dealTypeLabel[deal.deal_type] ?? deal.deal_type}
+                        {(deal.deal_type && (dealTypeLabel[deal.deal_type] ?? deal.deal_type)) || "Deal"}
                         {deal.team_id    && " · Team deal"}
                         {deal.athlete_id && !deal.team_id && " · Athlete deal"}
                         {deal.start_date && ` · ${formatDate(deal.start_date)}`}
@@ -113,7 +121,9 @@ export default async function BrandCampaignsPage() {
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
-                      <span className="text-sm font-semibold text-black dark:text-white">{formatCurrency(deal.value)}</span>
+                      <span className="text-sm font-semibold text-black dark:text-white">
+                        {formatCurrency(deal.total_value)}
+                      </span>
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor[status]}`}>
                         {status}
                       </span>

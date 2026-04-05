@@ -4,10 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import AuthNav from "@/components/auth/AuthNav";
+import {
+  TEAM_GENDER_OPTIONS,
+  TEAM_SPORT_BASES,
+  composeTeamSport,
+  type TeamGenderValue,
+} from "@/lib/team/sportPicker";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const SPORTS = ["Basketball", "Soccer", "Lacrosse", "Track & Field", "Volleyball", "Football", "Baseball", "Softball", "Swimming & Diving", "Tennis", "Cross Country", "Field Hockey", "Ice Hockey", "Wrestling", "Golf", "Rowing", "Other"];
 const DIVISIONS = ["D1", "D2", "D3", "NAIA", "Club"];
 const BRAND_TYPES = ["Apparel", "Food & Beverage", "Fitness & Wellness", "Technology", "Local Businesses", "Beauty", "Finance", "Entertainment", "Other"];
 const DEAL_TYPES = [
@@ -132,8 +137,9 @@ export default function TeamManagerOnboardingPage() {
 
   // Section 1 — Team Info
   const [school, setSchool] = useState("");
-  const [teamName, setTeamName] = useState("");
-  const [sport, setSport] = useState("");
+  const [teamGender, setTeamGender] = useState<TeamGenderValue | "">("");
+  const [sportBase, setSportBase] = useState("");
+  const [otherSport, setOtherSport] = useState("");
   const [division, setDivision] = useState("");
   const [numPlayers, setNumPlayers] = useState("");
 
@@ -163,8 +169,9 @@ export default function TeamManagerOnboardingPage() {
   function validateStep(s: number): string | null {
     if (s === 1) {
       if (!school.trim()) return "School name is required.";
-      if (!teamName.trim()) return "Team name is required.";
-      if (!sport) return "Please select a sport.";
+      if (!teamGender) return "Please select men's team or women's team.";
+      if (!sportBase) return "Please select a sport.";
+      if (sportBase === "Other" && !otherSport.trim()) return "Please specify the sport.";
       if (!numPlayers || parseInt(numPlayers) < 1) return "Please enter a valid number of players.";
     }
     if (s === 2) {
@@ -217,14 +224,16 @@ export default function TeamManagerOnboardingPage() {
 
     setSubmitting(true);
 
+    const composedSport = composeTeamSport(teamGender as TeamGenderValue, sportBase, otherSport);
+
     try {
       const res = await fetch("/api/onboarding/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           school: school.trim(),
-          team_name: teamName.trim(),
-          sport,
+          team_name: composedSport,
+          sport: composedSport,
           division: division || null,
           num_players: parseInt(numPlayers),
           manager_first_name: firstName.trim(),
@@ -254,6 +263,11 @@ export default function TeamManagerOnboardingPage() {
 
   const phoneValid = phone.trim().length > 0 && isValidPhone(phone);
 
+  const composedPreview =
+    teamGender && sportBase && (sportBase !== "Other" || otherSport.trim())
+      ? composeTeamSport(teamGender as TeamGenderValue, sportBase, otherSport)
+      : null;
+
   return (
     <div className="min-h-screen bg-white dark:bg-[#0d1117]">
       <AuthNav />
@@ -282,18 +296,56 @@ export default function TeamManagerOnboardingPage() {
                   className={inputCls} placeholder="Boston University" />
               </Field>
 
-              <Field label="Team Name" required>
-                <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)}
-                  className={inputCls} placeholder="Women's Lacrosse" />
+              <Field label="Team" required hint="men's or women's">
+                <select
+                  value={teamGender}
+                  onChange={(e) => setTeamGender(e.target.value as TeamGenderValue | "")}
+                  className={`${inputCls} cursor-pointer`}
+                >
+                  <option value="" disabled>Select team</option>
+                  {TEAM_GENDER_OPTIONS.map((g) => (
+                    <option key={g.value} value={g.value}>{g.label}</option>
+                  ))}
+                </select>
               </Field>
 
               <Field label="Sport" required>
-                <select value={sport} onChange={(e) => setSport(e.target.value)}
-                  className={`${inputCls} cursor-pointer`}>
+                <select
+                  value={sportBase}
+                  onChange={(e) => {
+                    setSportBase(e.target.value);
+                    if (e.target.value !== "Other") setOtherSport("");
+                  }}
+                  className={`${inputCls} cursor-pointer`}
+                >
                   <option value="" disabled>Select a sport</option>
-                  {SPORTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {TEAM_SPORT_BASES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
               </Field>
+
+              {sportBase === "Other" && (
+                <Field label="Specify sport" required>
+                  <input
+                    type="text"
+                    value={otherSport}
+                    onChange={(e) => setOtherSport(e.target.value)}
+                    className={inputCls}
+                    placeholder="e.g. Rugby"
+                  />
+                </Field>
+              )}
+
+              {composedPreview && (
+                <div className="rounded-xl border border-[#1f7ae0]/25 bg-[#dbeafe]/50 px-4 py-3 text-sm dark:border-[#1f7ae0]/30 dark:bg-[#1a2f5a]/50">
+                  <span className="font-semibold text-[#1f7ae0] dark:text-[#93c5fd]">Team and sport shown as: </span>
+                  <span className="text-black dark:text-white">{composedPreview}</span>
+                  <p className="mt-1 text-xs text-black/45 dark:text-white/40">
+                    This is saved as your team name and sport for Discover and deals.
+                  </p>
+                </div>
+              )}
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <Field label="Division" hint="(optional)">

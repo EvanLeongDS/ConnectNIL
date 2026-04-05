@@ -12,7 +12,10 @@ import {
   formatDate,
 } from "@/lib/deals/types";
 
-const STATUS_GROUPS: DealStatus[] = ["active", "pending", "completed", "cancelled"];
+export const dynamic = "force-dynamic";
+
+/** Pending first so brands see proposals awaiting team response at the top. */
+const STATUS_GROUPS: DealStatus[] = ["pending", "active", "completed", "cancelled"];
 
 export default async function BrandDealsPage({
   searchParams,
@@ -33,7 +36,7 @@ export default async function BrandDealsPage({
     .maybeSingle();
   if (!profile) redirect("/onboarding/brand-manager");
 
-  const { data: rows } = await supabase
+  const { data: rows, error: dealsError } = await supabase
     .from("partnerships")
     .select(
       "id, title, description, team_display_name, season, deal_type, status, total_value, payment_type, start_date, end_date, created_at"
@@ -70,7 +73,8 @@ export default async function BrandDealsPage({
               Deals
             </h1>
             <p className="mt-1 text-sm text-black/45 dark:text-white/40">
-              All NIL partnership proposals you have sent to teams.
+              Every proposal you have sent appears below. Open a deal to review the full agreement; you can edit details
+              while a proposal is still awaiting team review.
             </p>
           </div>
           <Link
@@ -84,6 +88,17 @@ export default async function BrandDealsPage({
         {justSent && (
           <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-400">
             Deal proposal sent! The team manager will review it shortly.
+          </div>
+        )}
+
+        {dealsError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
+            <p className="font-semibold">Could not load your deals</p>
+            <p className="mt-1 text-red-700 dark:text-red-400">{dealsError.message}</p>
+            <p className="mt-2 text-xs text-red-600/90 dark:text-red-400/80">
+              If you recently ran database migrations, confirm <code className="rounded bg-red-100 px-1 dark:bg-red-900/40">011_deals_v2.sql</code> is applied
+              (column <code className="rounded bg-red-100 px-1 dark:bg-red-900/40">total_value</code> replaces <code className="rounded bg-red-100 px-1 dark:bg-red-900/40">value</code>).
+            </p>
           </div>
         )}
 
@@ -115,15 +130,16 @@ export default async function BrandDealsPage({
               </h2>
               <div className="space-y-3">
                 {group.map((deal) => (
-                  <div
+                  <Link
                     key={deal.id}
-                    className="flex items-center gap-4 rounded-2xl border border-black/6 bg-white px-5 py-4 shadow-sm dark:border-white/6 dark:bg-[#161b27]"
+                    href={`/dashboard/brand-dashboard/deals/${deal.id}`}
+                    className="flex items-center gap-4 rounded-2xl border border-black/6 bg-white px-5 py-4 shadow-sm transition hover:border-black/12 dark:border-white/6 dark:bg-[#161b27] dark:hover:border-white/12"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-black dark:text-white">
-                        {deal.title}
-                      </p>
+                      <p className="truncate font-semibold text-black dark:text-white">{deal.title}</p>
                       <p className="mt-0.5 text-sm text-black/40 dark:text-white/35">
+                        <span className="text-black/50 dark:text-white/45">Sent {formatDate(deal.created_at)}</span>
+                        {" · "}
                         {deal.team_display_name ?? "—"}
                         {deal.season ? ` · ${deal.season}` : ""}
                         {deal.deal_type
@@ -133,29 +149,34 @@ export default async function BrandDealsPage({
                         {deal.end_date ? ` → ${formatDate(deal.end_date)}` : ""}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+                      {status === "pending" && (
+                        <span className="text-xs font-semibold text-[#1f7ae0] dark:text-[#8ec5ff]">View / edit →</span>
+                      )}
                       <span className="text-sm font-semibold text-black dark:text-white">
                         {formatCurrency(deal.total_value)}
                       </span>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${DEAL_STATUS_COLORS[status]}`}
-                      >
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${DEAL_STATUS_COLORS[status]}`}>
                         {DEAL_STATUS_LABELS[status]}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </section>
           );
         })}
 
-        {deals.length === 0 && (
+        {deals.length === 0 && !dealsError && (
           <div className="rounded-2xl border border-black/6 bg-white py-16 text-center shadow-sm dark:border-white/6 dark:bg-[#161b27]">
             <p className="text-4xl">🤝</p>
             <p className="mt-3 font-semibold text-black/60 dark:text-white/50">No deals yet</p>
             <p className="mt-1 text-sm text-black/35 dark:text-white/30">
-              Propose your first NIL partnership to get started.
+              Propose your first NIL partnership to get started. After you send one, it will show up here and on your{" "}
+              <Link href="/dashboard/brand-dashboard" className="font-semibold text-[#1f7ae0] hover:underline">
+                brand overview
+              </Link>
+              .
             </p>
             <Link
               href="/dashboard/brand-dashboard/deals/new"

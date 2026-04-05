@@ -3,16 +3,27 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+const inputCls =
+  "mt-2 w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-black shadow-sm outline-none focus:border-[#1f7ae0] focus:ring-2 focus:ring-[#1f7ae0]/20 dark:border-white/10 dark:bg-[#1a2035] dark:text-white dark:placeholder:text-white/30 dark:focus:border-[#3d8ef0]";
+
 export default function DealRespondButtons({ dealId }: { dealId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [teamSignerName, setTeamSignerName] = useState("");
 
   async function respond(action: "accept" | "decline") {
     if (action === "accept" && !confirmed) {
       setConfirmed(true);
       return;
+    }
+    if (action === "accept") {
+      const n = teamSignerName.trim();
+      if (n.length < 2) {
+        setError("Type your full name to sign as the team representative.");
+        return;
+      }
     }
     setBusy(true);
     setError(null);
@@ -20,7 +31,10 @@ export default function DealRespondButtons({ dealId }: { dealId: string }) {
       const res = await fetch(`/api/deals/${dealId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({
+          action,
+          ...(action === "accept" ? { teamSignerName: teamSignerName.trim() } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -47,6 +61,16 @@ export default function DealRespondButtons({ dealId }: { dealId: string }) {
           <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
             By accepting, you agree to the terms of this NIL partnership agreement and commit your team to the deliverables outlined above.
           </p>
+          <label className="mt-4 block text-sm font-semibold text-black/70 dark:text-white/60">
+            Type your full name (electronic signature)
+            <input
+              className={inputCls}
+              placeholder="e.g. Jordan Smith"
+              value={teamSignerName}
+              onChange={(e) => setTeamSignerName(e.target.value)}
+              autoComplete="name"
+            />
+          </label>
           <div className="mt-3 flex gap-3">
             <button
               onClick={() => respond("accept")}
@@ -56,7 +80,10 @@ export default function DealRespondButtons({ dealId }: { dealId: string }) {
               {busy ? "Saving…" : "Confirm acceptance"}
             </button>
             <button
-              onClick={() => setConfirmed(false)}
+              onClick={() => {
+                setConfirmed(false);
+                setTeamSignerName("");
+              }}
               disabled={busy}
               className="rounded-xl border border-black/10 bg-white px-5 py-2.5 text-sm font-semibold text-black/60 hover:bg-black/3 dark:border-white/10 dark:bg-transparent dark:text-white/50 dark:hover:bg-white/5"
             >

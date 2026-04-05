@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createServiceClient } from "@/lib/supabase/server";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const CONTACT_EMAIL = "leonge1@bu.edu";
+
+function getResend(): Resend | null {
+  const key = process.env.RESEND_API_KEY?.trim();
+  return key ? new Resend(key) : null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,6 +41,12 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Send notification email to ConnectNIL inbox
+    const resend = getResend();
+    if (!resend) {
+      console.warn("RESEND_API_KEY not set; contact saved without notification email.");
+      return NextResponse.json({ success: true });
+    }
+
     const { error: emailError } = await resend.emails.send({
       from: "ConnectNIL Contact <onboarding@resend.dev>",
       to: CONTACT_EMAIL,

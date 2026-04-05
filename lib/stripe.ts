@@ -1,9 +1,21 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-12-18.acacia",
-  typescript: true,
-});
+let stripeClient: Stripe | undefined;
+
+/** Lazy init so `next build` does not require STRIPE_SECRET_KEY at compile/static analysis time. */
+export function getStripe(): Stripe {
+  if (!stripeClient) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) {
+      throw new Error("STRIPE_SECRET_KEY is not set");
+    }
+    stripeClient = new Stripe(key, {
+      apiVersion: "2025-02-24.acacia",
+      typescript: true,
+    });
+  }
+  return stripeClient;
+}
 
 export const PLANS = {
   FREE: {

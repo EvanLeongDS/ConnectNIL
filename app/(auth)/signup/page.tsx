@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { navigateAfterSignUp } from "@/lib/auth/signupRedirect";
 import AuthNav from "@/components/auth/AuthNav";
 
-export default function SignupPage() {
+function SignupPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const role = searchParams.get("role") ?? "";
@@ -140,5 +140,20 @@ export default function SignupPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-white px-8 dark:bg-[#0d1117]">
+          <AuthNav />
+          <p className="text-sm text-black/50 dark:text-white/50">Loading…</p>
+        </main>
+      }
+    >
+      <SignupPageInner />
+    </Suspense>
   );
 }

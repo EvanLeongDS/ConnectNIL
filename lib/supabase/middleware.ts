@@ -11,13 +11,34 @@ function misconfigResponse(message: string) {
   });
 }
 
+/** Vercel/UI copy-paste often wraps values in quotes — strip so URL/key parse correctly. */
+function trimEnv(value: string | undefined) {
+  const t = value?.trim();
+  if (!t) return "";
+  if (
+    (t.startsWith('"') && t.endsWith('"')) ||
+    (t.startsWith("'") && t.endsWith("'"))
+  ) {
+    return t.slice(1, -1).trim();
+  }
+  return t;
+}
+
 export async function updateSession(request: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const url = trimEnv(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const anonKey = trimEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
   if (!url || !anonKey) {
     return misconfigResponse(
       "Server misconfiguration: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY on the deployment (e.g. Vercel → Environment Variables → Production)."
+    );
+  }
+
+  try {
+    new URL(url);
+  } catch {
+    return misconfigResponse(
+      "NEXT_PUBLIC_SUPABASE_URL is not a valid URL. Copy Project URL from Supabase (e.g. https://xxxx.supabase.co) with no extra quotes or spaces."
     );
   }
 
@@ -30,9 +51,13 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet: CookieToSet[]) {
-          cookiesToSet.forEach(({ name, value }: CookieToSet) =>
-            request.cookies.set(name, value)
-          );
+          for (const { name, value } of cookiesToSet) {
+            try {
+              request.cookies.set(name, value);
+            } catch {
+              // Some Next.js runtimes disallow mutating request cookies; response Set-Cookie is enough for the browser.
+            }
+          }
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }: CookieToSet) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -41,9 +66,13 @@ export async function updateSession(request: NextRequest) {
       },
     });
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data, error: userError } = await supabase.auth.getUser();
+    const user = data.user;
+
+    if (userError) {
+      // Stale/invalid session cookies return an error but should not take the site offline.
+      console.error("[middleware] supabase.auth.getUser:", userError.message);
+    }
 
     const { pathname } = request.nextUrl;
 
@@ -93,9 +122,10 @@ export async function updateSession(request: NextRequest) {
 
     return supabaseResponse;
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     console.error("[middleware] updateSession failed:", err);
     return misconfigResponse(
-      "Authentication middleware failed. Check Supabase env vars and project status, then see deployment logs."
+      `Authentication middleware failed: ${detail}\n\nCheck: Supabase project is not paused; NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY match Supabase → Settings → API; values have no extra quotes. See deployment function logs for the same message.`
     );
   }
 }

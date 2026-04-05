@@ -125,7 +125,6 @@ function ChipToggle({ options, selected, onChange }: {
 
 export default function TeamManagerOnboardingPage() {
   const router = useRouter();
-  const supabase = createClient();
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
@@ -160,6 +159,7 @@ export default function TeamManagerOnboardingPage() {
   const [availability, setAvailability] = useState("");
 
   useEffect(() => {
+    const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
       if (data.user?.email) setUserEmail(data.user.email);
     });

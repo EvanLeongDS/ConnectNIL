@@ -248,7 +248,6 @@ function SectionTitle({ title, subtitle }: { title: string; subtitle?: string })
 
 export default function AthleteOnboardingPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [step, setStep] = useState(1);
   const [userEmail, setUserEmail] = useState("");
@@ -277,6 +276,7 @@ export default function AthleteOnboardingPage() {
   const [igTouched, setIgTouched] = useState(false);
 
   useEffect(() => {
+    const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
       if (data.user?.email) setUserEmail(data.user.email);
     });

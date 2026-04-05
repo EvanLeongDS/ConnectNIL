@@ -347,7 +347,6 @@ function CheckboxGrid({
 
 export default function BrandManagerOnboardingPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [step, setStep] = useState(1);
   const [userEmail, setUserEmail] = useState("");
@@ -380,6 +379,7 @@ export default function BrandManagerOnboardingPage() {
   const [socialLinkedin, setSocialLinkedin] = useState("");
 
   useEffect(() => {
+    const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
       if (data.user?.email) setUserEmail(data.user.email);
     });

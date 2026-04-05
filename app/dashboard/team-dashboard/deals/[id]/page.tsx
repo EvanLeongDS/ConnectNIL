@@ -3,8 +3,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import DealRespondButtons from "@/components/deals/DealRespondButtons";
+import { DeliverableSubmitButton } from "@/components/deals/DeliverableActions";
 import {
   DealRow,
+  DealPaymentRow,
   DeliverableRow,
   DeliverableFrequency,
   DELIVERABLE_FREQUENCY_LABELS,
@@ -15,6 +17,13 @@ import {
   formatCurrency,
   formatDate,
 } from "@/lib/deals/types";
+
+const DELIVERABLE_STATUS_LABELS: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Pending",   cls: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400" },
+  submitted: { label: "Submitted", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400" },
+  approved:  { label: "Approved",  cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400" },
+  rejected:  { label: "Rejected",  cls: "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400" },
+};
 
 function normalizeFrequency(f: string | null | undefined): DeliverableFrequency {
   if (f === "daily" || f === "weekly" || f === "monthly" || f === "season" || f === "one_time") return f;
@@ -56,9 +65,17 @@ export default async function TeamDealDetailPage({ params }: Props) {
     .select("id, title, description, due_date, frequency, status, created_at")
     .eq("partnership_id", id)
     .order("created_at");
-
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
 
+  const { data: paymentRows } = await supabase
+    .from("deal_payments")
+    .select("*")
+    .eq("partnership_id", id)
+    .order("created_at");
+  const payments = (paymentRows ?? []) as DealPaymentRow[];
+  const paidPayments = payments.filter((p) => p.status === "paid");
+
+  const isActive = d.status === "active";
   const managerName = `${profile.manager_first_name} ${profile.manager_last_name}`.trim();
 
   return (
@@ -162,38 +179,54 @@ export default async function TeamDealDetailPage({ params }: Props) {
             {/* Deliverables */}
             <ContractSection label="4. Team obligations — deliverables">
               {deliverables.length > 0 ? (
-                <ol className="space-y-3">
+                <ol className="space-y-4">
                   {deliverables.map((del, i) => {
                     const freq = normalizeFrequency(del.frequency);
+                    const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
                     return (
-                    <li key={del.id} className="flex gap-3 text-sm">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
-                        {i + 1}
-                      </span>
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-wide text-[#1f7ae0] dark:text-[#8ec5ff]">
-                          {DELIVERABLE_FREQUENCY_LABELS[freq]}
-                        </p>
-                        <span className="font-semibold text-black dark:text-white">{del.title}</span>
-                        {del.description && (
-                          <span className="ml-1 text-black/55 dark:text-white/45"> — {del.description}</span>
-                        )}
-                        <p className="mt-1 text-xs leading-relaxed text-black/45 dark:text-white/35">
-                          {freq === "one_time" && "Single deliverable."}
-                          {freq === "daily" && "Repeats each day during the agreement term."}
-                          {freq === "weekly" && "Repeats each week during the agreement term."}
-                          {freq === "monthly" && "Repeats each month during the agreement term."}
-                          {freq === "season" && "One obligation for the full season (as described)."}
-                        </p>
-                        {del.due_date && (
-                          <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
-                            {freq === "one_time" ? "Due " : "First / milestone: "}
-                            {formatDate(del.due_date)}
+                      <li key={del.id} className="flex gap-3 text-sm">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
+                          {i + 1}
+                        </span>
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1f7ae0] dark:text-[#8ec5ff]">
+                              {DELIVERABLE_FREQUENCY_LABELS[freq]}
+                            </p>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusInfo.cls}`}>
+                              {statusInfo.label}
+                            </span>
+                          </div>
+                          <span className="font-semibold text-black dark:text-white">{del.title}</span>
+                          {del.description && (
+                            <span className="ml-1 text-black/55 dark:text-white/45"> — {del.description}</span>
+                          )}
+                          <p className="mt-1 text-xs leading-relaxed text-black/45 dark:text-white/35">
+                            {freq === "one_time" && "Single deliverable."}
+                            {freq === "daily" && "Repeats each day during the agreement term."}
+                            {freq === "weekly" && "Repeats each week during the agreement term."}
+                            {freq === "monthly" && "Repeats each month during the agreement term."}
+                            {freq === "season" && "One obligation for the full season (as described)."}
                           </p>
-                        )}
-                      </div>
-                    </li>
-                  );
+                          {del.due_date && (
+                            <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
+                              {freq === "one_time" ? "Due " : "First / milestone: "}
+                              {formatDate(del.due_date)}
+                            </p>
+                          )}
+                          {isActive && (del.status === "pending" || del.status === "rejected") && (
+                            <div className="mt-2">
+                              <DeliverableSubmitButton dealId={id} deliverableId={del.id} />
+                            </div>
+                          )}
+                          {isActive && del.status === "submitted" && (
+                            <p className="mt-1.5 text-xs text-black/40 dark:text-white/35">
+                              Awaiting brand review…
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    );
                   })}
                 </ol>
               ) : (
@@ -311,6 +344,74 @@ export default async function TeamDealDetailPage({ params }: Props) {
               Review the full agreement above, then accept or decline.
             </p>
             <DealRespondButtons dealId={d.id} />
+          </div>
+        )}
+
+        {/* Payment status (active / completed deals) */}
+        {(isActive || d.status === "completed") && (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
+            <div className="border-b border-black/6 bg-black/2 px-8 py-5 dark:border-white/6 dark:bg-white/3">
+              <p className="text-xs font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                Payment Status
+              </p>
+            </div>
+            <div className="px-8 py-6">
+              <div className="flex flex-wrap items-center gap-4">
+                <div>
+                  <p className="text-sm text-black/50 dark:text-white/40">Total value</p>
+                  <p className="text-xl font-black tracking-tight text-black dark:text-white">
+                    {formatCurrency(d.total_value)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-black/50 dark:text-white/40">Received so far</p>
+                  <p className="text-xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
+                    {formatCurrency(d.paid_cents / 100)}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${
+                    d.payment_status === "paid"
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400"
+                      : d.payment_status === "partial"
+                      ? "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400"
+                      : "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400"
+                  }`}
+                >
+                  {d.payment_status === "paid"
+                    ? "Fully paid"
+                    : d.payment_status === "partial"
+                    ? "Partially paid"
+                    : "Awaiting payment"}
+                </span>
+              </div>
+
+              {paidPayments.length > 0 && (
+                <div className="mt-5 space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                    Transactions
+                  </p>
+                  {paidPayments.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between rounded-lg bg-black/2 px-4 py-2.5 dark:bg-white/3">
+                      <p className="text-sm text-black/70 dark:text-white/60">
+                        {p.payment_type === "monthly" && p.installment_number
+                          ? `Installment #${p.installment_number}`
+                          : p.payment_type === "per_deliverable"
+                          ? "Deliverable payment"
+                          : "One-time payment"}{" "}
+                        · {formatDate(p.paid_at)}
+                      </p>
+                      <span className="text-sm font-semibold text-black dark:text-white">
+                        {formatCurrency(p.net_cents / 100)}
+                        <span className="ml-1 text-xs font-normal text-black/40 dark:text-white/35">
+                          (net)
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>

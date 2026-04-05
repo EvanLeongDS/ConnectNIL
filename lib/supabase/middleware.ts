@@ -122,10 +122,9 @@ export async function updateSession(request: NextRequest) {
 
     return supabaseResponse;
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
     console.error("[middleware] updateSession failed:", err);
     return misconfigResponse(
-      `Authentication middleware failed: ${detail}\n\nCheck: Supabase project is not paused; NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY match Supabase → Settings → API; values have no extra quotes. See deployment function logs for the same message.`
+      "Authentication middleware failed. Check Supabase env vars, project status, and deployment logs."
     );
   }
 }

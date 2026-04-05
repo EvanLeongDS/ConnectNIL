@@ -2,6 +2,8 @@ export type DealStatus = "draft" | "pending" | "active" | "completed" | "cancell
 export type PaymentType = "one_time" | "monthly" | "per_deliverable";
 export type DealCategory = "social_media" | "events" | "content_creation" | "mixed";
 export type DeliverableStatus = "pending" | "submitted" | "approved" | "rejected";
+export type DealPaymentStatus = "pending" | "processing" | "paid" | "failed";
+export type DealOverallPaymentStatus = "unpaid" | "partial" | "paid";
 
 /** How often this obligation applies over the deal term. */
 export type DeliverableFrequency = "one_time" | "daily" | "weekly" | "monthly" | "season";
@@ -31,8 +33,26 @@ export interface DealRow {
   team_signed_at: string | null;
   brand_signer_name: string | null;
   team_signer_name: string | null;
+  payment_status: DealOverallPaymentStatus;
+  paid_cents: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface DealPaymentRow {
+  id: string;
+  partnership_id: string;
+  deliverable_id: string | null;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  amount_cents: number;
+  commission_cents: number;
+  net_cents: number;
+  status: DealPaymentStatus;
+  payment_type: PaymentType;
+  installment_number: number | null;
+  created_at: string;
+  paid_at: string | null;
 }
 
 export interface DeliverableRow {
@@ -96,6 +116,26 @@ export function formatCurrency(v: number | null | undefined): string {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(v);
+}
+
+/** Number of monthly installments for a deal based on its start/end dates. */
+export function computeNumMonths(startDate: string | null, endDate: string | null): number {
+  if (!startDate || !endDate) return 1;
+  const start = new Date(startDate).getTime();
+  const end = new Date(endDate).getTime();
+  return Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24 * 30.44)));
+}
+
+/** Amount in cents for a given installment (last installment absorbs rounding remainder). */
+export function installmentAmountCents(
+  totalValueDollars: number,
+  numMonths: number,
+  installmentNumber: number
+): number {
+  const totalCents = Math.round(totalValueDollars * 100);
+  const base = Math.floor(totalCents / numMonths);
+  const remainder = totalCents - base * numMonths;
+  return installmentNumber === numMonths ? base + remainder : base;
 }
 
 export function formatDate(d: string | null | undefined): string {

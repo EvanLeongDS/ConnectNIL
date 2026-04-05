@@ -1,10 +1,13 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
+import InitiatePaymentButton from "@/components/deals/InitiatePaymentButton";
+import { DeliverableReviewButtons } from "@/components/deals/DeliverableActions";
 import {
   DealRow,
   DeliverableRow,
+  DealPaymentRow,
   DeliverableFrequency,
   DELIVERABLE_FREQUENCY_LABELS,
   DEAL_CATEGORY_LABELS,
@@ -13,7 +16,16 @@ import {
   DEAL_STATUS_LABELS,
   formatCurrency,
   formatDate,
+  computeNumMonths,
+  installmentAmountCents,
 } from "@/lib/deals/types";
+
+const DELIVERABLE_STATUS_LABELS: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Pending",   cls: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400" },
+  submitted: { label: "Submitted", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400" },
+  approved:  { label: "Approved",  cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400" },
+  rejected:  { label: "Rejected",  cls: "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400" },
+};
 
 function normalizeFrequency(f: string | null | undefined): DeliverableFrequency {
   if (f === "daily" || f === "weekly" || f === "monthly" || f === "season" || f === "one_time") return f;
@@ -22,12 +34,12 @@ function normalizeFrequency(f: string | null | undefined): DeliverableFrequency 
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ updated?: string }>;
+  searchParams: Promise<{ updated?: string; payment?: string }>;
 }
 
 export default async function BrandDealDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
-  const { updated } = await searchParams;
+  const { updated, payment } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -42,7 +54,12 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
     .maybeSingle();
   if (!profile) redirect("/onboarding/brand-manager");
 
-  const { data: deal } = await supabase.from("partnerships").select("*").eq("id", id).eq("brand_id", user.id).maybeSingle();
+  const { data: deal } = await supabase
+    .from("partnerships")
+    .select("*")
+    .eq("id", id)
+    .eq("brand_id", user.id)
+    .maybeSingle();
   if (!deal) notFound();
 
   const d = deal as DealRow;
@@ -52,20 +69,55 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
     .select("id, title, description, due_date, frequency, status, created_at")
     .eq("partnership_id", id)
     .order("created_at");
-
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
 
-  const name =
-    profile.company_name ||
-    `${profile.first_name} ${profile.last_name}`.trim() ||
-    "Brand";
+  // Fetch payments via service client (bypasses RLS edge cases)
+  const service = createServiceClient();
+  const { data: paymentRows } = await service
+    .from("deal_payments")
+    .select("*")
+    .eq("partnership_id", id)
+    .order("created_at");
+  const payments = (paymentRows ?? []) as DealPaymentRow[];
 
-  const showUpdated = updated === "1";
+  const name =
+    profile.company_name || `${profile.first_name} ${profile.last_name}`.trim() || "Brand";
+
+  const isActive = d.status === "active";
+  const numMonths = computeNumMonths(d.start_date, d.end_date);
+
+  // Build a map: deliverable_id → paid payment (for per_deliverable)
+  const paidByDeliverable = new Map<string, DealPaymentRow>();
+  const processingByDeliverable = new Map<string, DealPaymentRow>();
+  payments.forEach((p) => {
+    if (p.deliverable_id) {
+      if (p.status === "paid") paidByDeliverable.set(p.deliverable_id, p);
+      else if (p.status === "processing" || p.status === "pending")
+        processingByDeliverable.set(p.deliverable_id, p);
+    }
+  });
+
+  // Build a map: installment_number → payment (for monthly)
+  const paidInstallments = new Map<number, DealPaymentRow>();
+  const processingInstallments = new Map<number, DealPaymentRow>();
+  payments.forEach((p) => {
+    if (p.installment_number != null) {
+      if (p.status === "paid") paidInstallments.set(p.installment_number, p);
+      else if (p.status === "processing" || p.status === "pending")
+        processingInstallments.set(p.installment_number, p);
+    }
+  });
+
+  // For one_time
+  const oneTimePaid = payments.find((p) => p.status === "paid");
+  const oneTimeInProgress = !oneTimePaid && payments.find((p) => p.status === "processing" || p.status === "pending");
 
   return (
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
       <DashboardNav role="brand-manager" name={name} />
       <main className="mx-auto max-w-3xl px-6 py-10 md:px-10">
+
+        {/* Breadcrumb + edit link */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm">
             <Link
@@ -87,12 +139,24 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
           )}
         </div>
 
-        {showUpdated && (
+        {/* Flash messages */}
+        {updated === "1" && (
           <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-400">
             Your proposal was updated. The team will see the latest version when they review it.
           </div>
         )}
+        {payment === "success" && (
+          <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-400">
+            Payment received! Thank you — we&apos;ve recorded the transaction.
+          </div>
+        )}
+        {payment === "cancelled" && (
+          <div className="mb-6 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700 dark:border-yellow-800/50 dark:bg-yellow-900/20 dark:text-yellow-400">
+            Payment was cancelled. You can try again below.
+          </div>
+        )}
 
+        {/* Status badge */}
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${DEAL_STATUS_COLORS[d.status]}`}>
             {DEAL_STATUS_LABELS[d.status]}
@@ -101,8 +165,26 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
             Sent {formatDate(d.created_at)}
             {d.team_display_name ? ` · ${d.team_display_name}` : ""}
           </span>
+          {isActive && (
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                d.payment_status === "paid"
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400"
+                  : d.payment_status === "partial"
+                  ? "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400"
+                  : "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400"
+              }`}
+            >
+              {d.payment_status === "paid"
+                ? "Fully paid"
+                : d.payment_status === "partial"
+                ? `Partial — ${formatCurrency(d.paid_cents / 100)} paid`
+                : "Payment due"}
+            </span>
+          )}
         </div>
 
+        {/* ── Contract document ─────────────────────────────────────────── */}
         <div className="overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
           <div className="border-b border-black/6 bg-black/2 px-8 py-6 dark:border-white/6 dark:bg-white/3">
             <p className="text-xs font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
@@ -118,9 +200,7 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
             <Block label="Parties">
               <Row k="Team" v={d.team_display_name ?? "—"} />
               {d.season && <Row k="Season" v={d.season} />}
-              {d.deal_type && (
-                <Row k="Category" v={DEAL_CATEGORY_LABELS[d.deal_type] ?? d.deal_type} />
-              )}
+              {d.deal_type && <Row k="Category" v={DEAL_CATEGORY_LABELS[d.deal_type] ?? d.deal_type} />}
             </Block>
 
             <Block label="Term">
@@ -151,20 +231,35 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
               </Block>
             )}
 
+            {/* Deliverables — with approve/reject for active per_deliverable deals */}
             <Block label="Deliverables">
               {deliverables.length > 0 ? (
-                <ol className="space-y-3">
+                <ol className="space-y-4">
                   {deliverables.map((del, i) => {
                     const freq = normalizeFrequency(del.frequency);
+                    const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
+                    const delPaid = paidByDeliverable.get(del.id);
+                    const delInProgress = processingByDeliverable.get(del.id);
+
                     return (
                       <li key={del.id} className="flex gap-3 text-sm">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
                           {i + 1}
                         </span>
-                        <div>
-                          <p className="text-[11px] font-bold uppercase tracking-wide text-[#1f7ae0] dark:text-[#8ec5ff]">
-                            {DELIVERABLE_FREQUENCY_LABELS[freq]}
-                          </p>
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-[#1f7ae0] dark:text-[#8ec5ff]">
+                              {DELIVERABLE_FREQUENCY_LABELS[freq]}
+                            </p>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusInfo.cls}`}>
+                              {statusInfo.label}
+                            </span>
+                            {delPaid && (
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400">
+                                Paid
+                              </span>
+                            )}
+                          </div>
                           <span className="font-semibold text-black dark:text-white">{del.title}</span>
                           {del.description && (
                             <span className="text-black/55 dark:text-white/45"> — {del.description}</span>
@@ -173,6 +268,37 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
                             <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
                               {freq === "one_time" ? "Due " : "Milestone: "}
                               {formatDate(del.due_date)}
+                            </p>
+                          )}
+
+                          {/* Brand review actions for submitted deliverables */}
+                          {isActive && del.status === "submitted" && (
+                            <div className="mt-2">
+                              <DeliverableReviewButtons dealId={id} deliverableId={del.id} />
+                            </div>
+                          )}
+
+                          {/* Pay button for approved deliverables on per_deliverable deals */}
+                          {isActive &&
+                            d.payment_type === "per_deliverable" &&
+                            del.status === "approved" &&
+                            !delPaid &&
+                            !delInProgress && (
+                              <div className="mt-2">
+                                <InitiatePaymentButton
+                                  dealId={id}
+                                  amountCents={Math.floor(
+                                    ((d.total_value ?? 0) * 100) / Math.max(1, deliverables.length)
+                                  )}
+                                  deliverableId={del.id}
+                                  label={`Pay for this deliverable`}
+                                />
+                              </div>
+                            )}
+
+                          {delInProgress && !delPaid && (
+                            <p className="mt-1.5 text-xs text-black/45 dark:text-white/40">
+                              Payment in progress…
                             </p>
                           )}
                         </div>
@@ -217,10 +343,139 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
           </div>
         </div>
 
-        {d.status !== "pending" && (
+        {/* ── Payment Panel (active deals only) ─────────────────────────── */}
+        {isActive && d.payment_type !== "per_deliverable" && (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
+            <div className="border-b border-black/6 bg-black/2 px-8 py-5 dark:border-white/6 dark:bg-white/3">
+              <p className="text-xs font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                Payments
+              </p>
+              <p className="mt-1 text-sm text-black/50 dark:text-white/40">
+                5% platform fee retained by ConnectNIL; remainder distributed to the team and participating athletes.
+              </p>
+            </div>
+
+            <div className="px-8 py-6">
+              {/* one_time */}
+              {d.payment_type === "one_time" && (
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-black dark:text-white">
+                      One-time payment
+                    </p>
+                    <p className="mt-0.5 text-xl font-black tracking-tight text-black dark:text-white">
+                      {formatCurrency(d.total_value)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
+                      ConnectNIL fee (5%): {formatCurrency((d.total_value ?? 0) * 0.05)} &nbsp;·&nbsp;
+                      Net to team: {formatCurrency((d.total_value ?? 0) * 0.95)}
+                    </p>
+                  </div>
+                  {oneTimePaid ? (
+                    <span className="rounded-xl bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400">
+                      ✓ Paid {formatDate(oneTimePaid.paid_at)}
+                    </span>
+                  ) : oneTimeInProgress ? (
+                    <span className="text-sm text-black/45 dark:text-white/40">Payment in progress…</span>
+                  ) : (
+                    <InitiatePaymentButton
+                      dealId={id}
+                      amountCents={Math.round((d.total_value ?? 0) * 100)}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* monthly */}
+              {d.payment_type === "monthly" && (
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-black dark:text-white">
+                    {numMonths} monthly installment{numMonths !== 1 ? "s" : ""} ·{" "}
+                    {formatCurrency(d.total_value)} total
+                  </p>
+                  <div className="divide-y divide-black/5 dark:divide-white/5">
+                    {Array.from({ length: numMonths }, (_, i) => {
+                      const n = i + 1;
+                      const amtCents = installmentAmountCents(d.total_value ?? 0, numMonths, n);
+                      const paid = paidInstallments.get(n);
+                      const inProgress = processingInstallments.get(n);
+
+                      return (
+                        <div key={n} className="flex items-center justify-between gap-4 py-3">
+                          <div>
+                            <p className="text-sm font-medium text-black dark:text-white">
+                              Installment {n}
+                            </p>
+                            <p className="text-xs text-black/45 dark:text-white/40">
+                              {formatCurrency(amtCents / 100)} &nbsp;·&nbsp;
+                              Net: {formatCurrency((amtCents * 0.95) / 100)}
+                            </p>
+                          </div>
+                          {paid ? (
+                            <span className="rounded-lg bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400">
+                              ✓ Paid
+                            </span>
+                          ) : inProgress ? (
+                            <span className="text-xs text-black/45 dark:text-white/40">In progress…</span>
+                          ) : (
+                            <InitiatePaymentButton
+                              dealId={id}
+                              amountCents={amtCents}
+                              installmentNumber={n}
+                              label={`Pay installment ${n}`}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Payment history ───────────────────────────────────────────── */}
+        {payments.filter((p) => p.status === "paid").length > 0 && (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
+            <div className="border-b border-black/6 bg-black/2 px-8 py-5 dark:border-white/6 dark:bg-white/3">
+              <p className="text-xs font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                Payment History
+              </p>
+            </div>
+            <div className="divide-y divide-black/5 dark:divide-white/5">
+              {payments
+                .filter((p) => p.status === "paid")
+                .map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-4 px-8 py-4">
+                    <div>
+                      <p className="text-sm font-medium text-black dark:text-white">
+                        {p.payment_type === "monthly" && p.installment_number
+                          ? `Installment #${p.installment_number}`
+                          : p.payment_type === "per_deliverable"
+                          ? "Deliverable payment"
+                          : "One-time payment"}
+                      </p>
+                      <p className="text-xs text-black/40 dark:text-white/35">
+                        {formatDate(p.paid_at)} · Net: {formatCurrency(p.net_cents / 100)}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-black dark:text-white">
+                      {formatCurrency(p.amount_cents / 100)}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {d.status !== "pending" && d.status !== "active" && (
           <p className="mt-6 text-center text-sm text-black/45 dark:text-white/40">
             This deal is no longer editable.{" "}
-            <Link href="/dashboard/brand-dashboard/deals/new" className="font-semibold text-[#1f7ae0] hover:underline">
+            <Link
+              href="/dashboard/brand-dashboard/deals/new"
+              className="font-semibold text-[#1f7ae0] hover:underline"
+            >
               Propose another deal
             </Link>
           </p>

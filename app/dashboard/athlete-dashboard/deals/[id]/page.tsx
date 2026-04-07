@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import AthleteDealOptIn from "@/components/deals/AthleteDealOptIn";
-import { DeliverableSubmitButton } from "@/components/deals/DeliverableActions";
+import DeliverableProofView from "@/components/deals/DeliverableProofView";
 import {
   DealRow,
   DealPaymentRow,
@@ -30,10 +30,12 @@ function normalizeFrequency(f: string | null | undefined): DeliverableFrequency 
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ proof?: string }>;
 }
 
-export default async function AthleteDealDetailPage({ params }: Props) {
+export default async function AthleteDealDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { proof } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -65,7 +67,9 @@ export default async function AthleteDealDetailPage({ params }: Props) {
 
   const { data: deliverableRows } = await supabase
     .from("deliverables")
-    .select("id, title, description, due_date, frequency, status, created_at")
+    .select(
+      "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at"
+    )
     .eq("partnership_id", id)
     .order("created_at");
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
@@ -82,9 +86,9 @@ export default async function AthleteDealDetailPage({ params }: Props) {
   const athleteName = `${profile.first_name} ${profile.last_name}`.trim();
   const showTeamOptIn = Boolean(participation && d.team_id);
   const canSubmitDeliverables =
-    isActive &&
-    (isDirectAthlete ||
-      (participation?.status === "accepted"));
+    isActive && (isDirectAthlete || participation?.status === "accepted");
+  const proofHref = (deliverableId: string) =>
+    `/dashboard/athlete-dashboard/deals/${id}/deliverables/${deliverableId}`;
 
   return (
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
@@ -100,6 +104,12 @@ export default async function AthleteDealDetailPage({ params }: Props) {
           <span className="text-black/25 dark:text-white/20">/</span>
           <span className="text-black/60 dark:text-white/50">{d.title}</span>
         </div>
+
+        {proof === "submitted" && (
+          <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+            Proof submitted. The brand will review your deliverable.
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
           <div className="border-b border-black/6 bg-black/2 px-8 py-6 dark:border-white/6 dark:bg-white/3">
@@ -132,8 +142,13 @@ export default async function AthleteDealDetailPage({ params }: Props) {
               <ContractRow k="Payment" v={PAYMENT_TYPE_LABELS[d.payment_type] ?? d.payment_type} />
             </ContractSection>
 
-            {deliverables.length > 0 && (
-              <ContractSection label="Deliverables">
+            <ContractSection label="Deliverables">
+              {participation?.status === "invited" && d.team_id && (
+                <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+                  Accept the partnership below to unlock proof submission for these deliverables.
+                </p>
+              )}
+              {deliverables.length > 0 ? (
                 <ol className="space-y-4">
                   {deliverables.map((del, i) => {
                     const freq = normalizeFrequency(del.frequency);
@@ -153,13 +168,32 @@ export default async function AthleteDealDetailPage({ params }: Props) {
                             </span>
                           </div>
                           <span className="font-semibold text-black dark:text-white">{del.title}</span>
+                          {del.description && (
+                            <p className="mt-0.5 text-black/55 dark:text-white/45">{del.description}</p>
+                          )}
+                          {del.due_date && (
+                            <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
+                              {freq === "one_time" ? "Due " : "Milestone: "}
+                              {formatDate(del.due_date)}
+                            </p>
+                          )}
+                          <DeliverableProofView
+                            description={del.proof_description}
+                            imageUrls={del.proof_image_urls}
+                            className="mt-2"
+                          />
                           {canSubmitDeliverables && (del.status === "pending" || del.status === "rejected") && (
                             <div className="mt-2">
-                              <DeliverableSubmitButton dealId={id} deliverableId={del.id} />
+                              <Link
+                                href={proofHref(del.id)}
+                                className="inline-flex rounded-lg bg-[#1f7ae0] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1a6bc9]"
+                              >
+                                {del.status === "rejected" ? "Resubmit proof" : "Submit proof"}
+                              </Link>
                             </div>
                           )}
                           {isActive && del.status === "submitted" && (
-                            <p className="mt-1.5 text-xs text-black/40 dark:text-white/35">
+                            <p className="mt-2 text-xs text-black/40 dark:text-white/35">
                               Awaiting brand review…
                             </p>
                           )}
@@ -168,8 +202,10 @@ export default async function AthleteDealDetailPage({ params }: Props) {
                     );
                   })}
                 </ol>
-              </ContractSection>
-            )}
+              ) : (
+                <p className="text-sm text-black/45 dark:text-white/35">No deliverables listed for this deal.</p>
+              )}
+            </ContractSection>
 
             {(d.brand_signer_name || d.team_signer_name || d.brand_signed_at || d.team_signed_at) && (
               <ContractSection label="Signatures">
@@ -204,7 +240,6 @@ export default async function AthleteDealDetailPage({ params }: Props) {
           </div>
         )}
 
-        {/* Payment status */}
         {(isActive || d.status === "completed") && (
           <div className="mt-6 overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
             <div className="border-b border-black/6 bg-black/2 px-8 py-5 dark:border-white/6 dark:bg-white/3">
@@ -223,7 +258,7 @@ export default async function AthleteDealDetailPage({ params }: Props) {
                 <div>
                   <p className="text-sm text-black/50 dark:text-white/40">Paid so far</p>
                   <p className="text-xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(d.paid_cents / 100)}
+                    {formatCurrency((d.paid_cents ?? 0) / 100)}
                   </p>
                 </div>
                 <span

@@ -8,6 +8,7 @@ import {
   type TeamRow,
   type BrandContext,
 } from "@/lib/discover/matchScore";
+import { getStruckTeamIdsForBrand } from "@/lib/discover/struckDeals";
 
 export default async function BrandDiscoverPage() {
   const supabase = await createClient();
@@ -27,6 +28,7 @@ export default async function BrandDiscoverPage() {
   if (!profile) redirect("/onboarding/brand-manager");
 
   const service = createServiceClient();
+  const struckTeamIds = await getStruckTeamIdsForBrand(service, user.id);
   const { data: teams } = await service
     .from("team_profiles")
     .select(
@@ -45,7 +47,12 @@ export default async function BrandDiscoverPage() {
     team: t as TeamRow,
     score: scoreTeamForBrand(t as TeamRow, ctx),
   }));
-  scored.sort((a, b) => b.score - a.score);
+  scored.sort((a, b) => {
+    const aStruck = struckTeamIds.has(a.team.id) ? 1 : 0;
+    const bStruck = struckTeamIds.has(b.team.id) ? 1 : 0;
+    if (aStruck !== bStruck) return aStruck - bStruck;
+    return b.score - a.score;
+  });
 
   const name = profile.company_name || `${profile.first_name} ${profile.last_name}`.trim() || "Brand";
 

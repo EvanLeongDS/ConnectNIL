@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import InitiatePaymentButton from "@/components/deals/InitiatePaymentButton";
 import { DeliverableReviewButtons } from "@/components/deals/DeliverableActions";
+import DeliverableProofView from "@/components/deals/DeliverableProofView";
 import {
   DealRow,
   DeliverableRow,
@@ -66,7 +67,9 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
 
   const { data: deliverableRows } = await supabase
     .from("deliverables")
-    .select("id, title, description, due_date, frequency, status, created_at")
+    .select(
+      "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at"
+    )
     .eq("partnership_id", id)
     .order("created_at");
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
@@ -271,9 +274,13 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
                             </p>
                           )}
 
-                          {/* Brand review actions for submitted deliverables */}
+                          <DeliverableProofView
+                            description={del.proof_description}
+                            imageUrls={del.proof_image_urls}
+                            className="mt-3"
+                          />
                           {isActive && del.status === "submitted" && (
-                            <div className="mt-2">
+                            <div className="mt-3">
                               <DeliverableReviewButtons dealId={id} deliverableId={del.id} />
                             </div>
                           )}

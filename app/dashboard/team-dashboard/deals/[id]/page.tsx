@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import DealRespondButtons from "@/components/deals/DealRespondButtons";
-import { DeliverableSubmitButton } from "@/components/deals/DeliverableActions";
+import DeliverableProofView from "@/components/deals/DeliverableProofView";
 import {
   DealRow,
   DealPaymentRow,
@@ -32,10 +32,12 @@ function normalizeFrequency(f: string | null | undefined): DeliverableFrequency 
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ proof?: string }>;
 }
 
-export default async function TeamDealDetailPage({ params }: Props) {
+export default async function TeamDealDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const { proof } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -62,10 +64,15 @@ export default async function TeamDealDetailPage({ params }: Props) {
 
   const { data: deliverableRows } = await supabase
     .from("deliverables")
-    .select("id, title, description, due_date, frequency, status, created_at")
+    .select(
+      "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at"
+    )
     .eq("partnership_id", id)
     .order("created_at");
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
+
+  const proofHref = (deliverableId: string) =>
+    `/dashboard/team-dashboard/deals/${id}/deliverables/${deliverableId}`;
 
   const { data: paymentRows } = await supabase
     .from("deal_payments")
@@ -93,6 +100,12 @@ export default async function TeamDealDetailPage({ params }: Props) {
           <span className="text-black/25 dark:text-white/20">/</span>
           <span className="text-black/60 dark:text-white/50">{d.title}</span>
         </div>
+
+        {proof === "submitted" && (
+          <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+            Proof submitted. The brand will review this deliverable.
+          </div>
+        )}
 
         {/* Status banner for non-pending deals */}
         {d.status !== "pending" && (
@@ -214,9 +227,19 @@ export default async function TeamDealDetailPage({ params }: Props) {
                               {formatDate(del.due_date)}
                             </p>
                           )}
+                          <DeliverableProofView
+                            description={del.proof_description}
+                            imageUrls={del.proof_image_urls}
+                            className="mt-2"
+                          />
                           {isActive && (del.status === "pending" || del.status === "rejected") && (
                             <div className="mt-2">
-                              <DeliverableSubmitButton dealId={id} deliverableId={del.id} />
+                              <Link
+                                href={proofHref(del.id)}
+                                className="inline-flex rounded-lg bg-[#1f7ae0] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1a6bc9]"
+                              >
+                                {del.status === "rejected" ? "Resubmit proof" : "Submit proof"}
+                              </Link>
                             </div>
                           )}
                           {isActive && del.status === "submitted" && (

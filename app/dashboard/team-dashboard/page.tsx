@@ -70,6 +70,9 @@ export default async function TeamDashboard() {
   const activeDeals  = deals.filter((d) => d.status === "active");
   const pendingDeals = deals.filter((d) => d.status === "pending");
 
+  const uniqueBrands = new Set(deals.map((d) => d.brand_id).filter(Boolean)).size;
+  const completedDealsCount = deals.filter((d) => d.status === "completed").length;
+
   const athleteEmails: string[] = profile.athlete_emails ?? [];
   const totalEarned = deals
     .filter((d) => d.status === "completed")
@@ -180,6 +183,20 @@ export default async function TeamDashboard() {
               )}
             </Card>
 
+            <Card title="Partners Overview">
+              <div className="grid grid-cols-2 gap-4">
+                <MiniStat label="Brands working with" value={String(uniqueBrands)} />
+                <MiniStat label="Athletes invited" value={String(invitesSent)} />
+                <MiniStat label="Pending proposals" value={String(pendingDeals.length)} />
+                <MiniStat label="Completed deals" value={String(completedDealsCount)} />
+              </div>
+              {deals.length === 0 && (
+                <p className="mt-4 text-center text-sm text-black/35 dark:text-white/30">
+                  Accept a brand proposal or reach out in Discover to build partnerships.
+                </p>
+              )}
+            </Card>
+
             {/* Roster / invites */}
             <Card title="Roster & Invites">
               <div className="mb-4 flex items-center justify-between">
@@ -275,6 +292,15 @@ function ProfileRow({ label, value }: { label: string; value?: string }) {
       <span className="text-right text-sm font-medium text-black dark:text-white">
         {value ?? <span className="text-black/25 dark:text-white/20">Not set</span>}
       </span>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-black/5 bg-[#f9fafb] p-4 dark:border-white/5 dark:bg-[#1c2333]">
+      <p className="text-xs text-black/40 dark:text-white/35">{label}</p>
+      <p className="mt-1 text-xl font-black text-black dark:text-white">{value}</p>
     </div>
   );
 }

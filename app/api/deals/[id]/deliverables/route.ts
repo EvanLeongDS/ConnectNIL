@@ -4,10 +4,10 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 /**
  * PATCH /api/deals/[id]/deliverables
  *
- * body: { deliverable_id: string, action: "submit" | "approve" | "reject" }
+ * body: { deliverable_id: string, action: "approve" | "reject" }
  *
  * - brand-manager: approve | reject  (deliverable must be "submitted")
- * - team-manager / athlete: submit   (deliverable must be "pending" or "rejected")
+ * Athlete/team submit with images + proof: POST .../deliverables/[deliverableId]/submit
  */
 export async function PATCH(
   request: NextRequest,
@@ -70,96 +70,23 @@ export async function PATCH(
       );
     }
 
-    const { error: upErr } = await service
-      .from("deliverables")
-      .update({ status: action === "approve" ? "approved" : "rejected" })
-      .eq("id", deliverable_id);
+    const updates =
+      action === "approve"
+        ? { status: "approved" as const }
+        : {
+            status: "rejected" as const,
+            proof_description: null,
+            proof_image_urls: [],
+            submitted_at: null,
+          };
+
+    const { error: upErr } = await service.from("deliverables").update(updates).eq("id", deliverable_id);
     if (upErr) {
       console.error("deliverable review:", upErr);
       return NextResponse.json({ error: "Could not update deliverable." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, status: action === "approve" ? "approved" : "rejected" });
-  }
-
-  // ── Athlete / Team: submit ───────────────────────────────────────────────────
-  if (role === "team-manager" || role === "athlete") {
-    if (action !== "submit") {
-      return NextResponse.json({ error: "action must be submit." }, { status: 400 });
-    }
-
-    // Verify the user has access to this active deal
-    let hasAccess = false;
-
-    if (role === "team-manager") {
-      const { data } = await supabase
-        .from("partnerships")
-        .select("id, status")
-        .eq("id", partnershipId)
-        .eq("team_id", user.id)
-        .maybeSingle();
-      hasAccess = !!data && data.status === "active";
-    } else {
-      // Direct athlete deal
-      const { data: directDeal } = await supabase
-        .from("partnerships")
-        .select("id, status")
-        .eq("id", partnershipId)
-        .eq("athlete_id", user.id)
-        .maybeSingle();
-      if (directDeal?.status === "active") {
-        hasAccess = true;
-      } else {
-        // Roster participation (accepted)
-        const { data: pp } = await supabase
-          .from("partnership_participants")
-          .select("id")
-          .eq("partnership_id", partnershipId)
-          .eq("athlete_id", user.id)
-          .eq("status", "accepted")
-          .maybeSingle();
-        if (pp) {
-          const { data: dealData } = await supabase
-            .from("partnerships")
-            .select("status")
-            .eq("id", partnershipId)
-            .maybeSingle();
-          hasAccess = dealData?.status === "active";
-        }
-      }
-    }
-
-    if (!hasAccess) {
-      return NextResponse.json(
-        { error: "You don't have access to this deal or it is not active." },
-        { status: 403 }
-      );
-    }
-
-    const { data: deliverable } = await service
-      .from("deliverables")
-      .select("id, status")
-      .eq("id", deliverable_id)
-      .eq("partnership_id", partnershipId)
-      .maybeSingle();
-    if (!deliverable) return NextResponse.json({ error: "Deliverable not found." }, { status: 404 });
-    if (deliverable.status !== "pending" && deliverable.status !== "rejected") {
-      return NextResponse.json(
-        { error: "This deliverable cannot be submitted in its current state." },
-        { status: 409 }
-      );
-    }
-
-    const { error: upErr } = await service
-      .from("deliverables")
-      .update({ status: "submitted" })
-      .eq("id", deliverable_id);
-    if (upErr) {
-      console.error("deliverable submit:", upErr);
-      return NextResponse.json({ error: "Could not submit deliverable." }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true, status: "submitted" });
   }
 
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });

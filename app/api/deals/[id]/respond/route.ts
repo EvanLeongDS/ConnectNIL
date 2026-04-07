@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 export async function POST(
   request: NextRequest,
@@ -40,7 +40,7 @@ export async function POST(
 
   const { data: deal } = await supabase
     .from("partnerships")
-    .select("id, status, team_id")
+    .select("id, status, team_id, brand_id")
     .eq("id", id)
     .eq("team_id", user.id)
     .maybeSingle();
@@ -70,6 +70,28 @@ export async function POST(
   if (upErr) {
     console.error("respond deal:", upErr);
     return NextResponse.json({ error: "Could not update deal." }, { status: 500 });
+  }
+
+  if (action === "accept" && deal.brand_id) {
+    const teamId = deal.team_id as string;
+    const brandId = deal.brand_id as string;
+    const service = createServiceClient();
+    const [a, b] = await Promise.all([
+      service
+        .from("discovery_interests")
+        .delete()
+        .eq("viewer_id", brandId)
+        .eq("subject_type", "team")
+        .eq("subject_id", teamId),
+      service
+        .from("discovery_interests")
+        .delete()
+        .eq("viewer_id", teamId)
+        .eq("subject_type", "brand")
+        .eq("subject_id", brandId),
+    ]);
+    if (a.error) console.error("respond deal clear interest (brand→team):", a.error);
+    if (b.error) console.error("respond deal clear interest (team→brand):", b.error);
   }
 
   return NextResponse.json({ success: true, status: updates.status });

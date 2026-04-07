@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getStruckBrandIdsForTeam, getStruckTeamIdsForBrand } from "@/lib/discover/struckDeals";
 
 export type OpportunityResponse = "committed" | "exploring";
 
@@ -43,6 +44,8 @@ export async function loadBrandInquiriesForTeam(
   service: SupabaseClient,
   teamManagerId: string
 ): Promise<BrandOpportunityRow[]> {
+  const struckBrandIds = await getStruckBrandIdsForTeam(service, teamManagerId);
+
   const { data: interests, error: intErr } = await service
     .from("discovery_interests")
     .select("id, viewer_id, response, updated_at")
@@ -57,7 +60,10 @@ export async function loadBrandInquiriesForTeam(
     return [];
   }
 
-  const viewerIds = [...new Set(interests.map((r) => r.viewer_id as string))];
+  const interestsFiltered = interests.filter((r) => !struckBrandIds.has(r.viewer_id as string));
+  if (interestsFiltered.length === 0) return [];
+
+  const viewerIds = [...new Set(interestsFiltered.map((r) => r.viewer_id as string))];
 
   const [{ data: brands, error: brandErr }, { data: profiles, error: profErr }] = await Promise.all([
     service
@@ -75,7 +81,7 @@ export async function loadBrandInquiriesForTeam(
   const brandById = new Map((brands ?? []).map((b) => [b.id as string, b]));
   const emailById = new Map((profiles ?? []).map((p) => [p.id as string, p.email as string | null]));
 
-  return interests
+  return interestsFiltered
     .map((row) => {
       const b = brandById.get(row.viewer_id as string);
       if (!b) return null;
@@ -105,6 +111,8 @@ export async function loadTeamInquiriesForBrand(
   service: SupabaseClient,
   brandManagerId: string
 ): Promise<TeamOpportunityRow[]> {
+  const struckTeamIds = await getStruckTeamIdsForBrand(service, brandManagerId);
+
   const { data: interests, error: intErr } = await service
     .from("discovery_interests")
     .select("id, viewer_id, response, updated_at")
@@ -119,7 +127,10 @@ export async function loadTeamInquiriesForBrand(
     return [];
   }
 
-  const viewerIds = [...new Set(interests.map((r) => r.viewer_id as string))];
+  const interestsFiltered = interests.filter((r) => !struckTeamIds.has(r.viewer_id as string));
+  if (interestsFiltered.length === 0) return [];
+
+  const viewerIds = [...new Set(interestsFiltered.map((r) => r.viewer_id as string))];
 
   const [{ data: teams, error: teamErr }, { data: profiles, error: profErr }] = await Promise.all([
     service
@@ -137,7 +148,7 @@ export async function loadTeamInquiriesForBrand(
   const teamById = new Map((teams ?? []).map((t) => [t.id as string, t]));
   const emailById = new Map((profiles ?? []).map((p) => [p.id as string, p.email as string | null]));
 
-  return interests
+  return interestsFiltered
     .map((row) => {
       const t = teamById.get(row.viewer_id as string);
       if (!t) return null;
@@ -167,6 +178,8 @@ export async function loadBrandsYouReachedOutTo(
   service: SupabaseClient,
   teamManagerId: string
 ): Promise<BrandOpportunityRow[]> {
+  const struckBrandIds = await getStruckBrandIdsForTeam(service, teamManagerId);
+
   const { data: interests, error: intErr } = await service
     .from("discovery_interests")
     .select("id, subject_id, response, updated_at")
@@ -181,7 +194,10 @@ export async function loadBrandsYouReachedOutTo(
     return [];
   }
 
-  const subjectIds = [...new Set(interests.map((r) => r.subject_id as string))];
+  const interestsFiltered = interests.filter((r) => !struckBrandIds.has(r.subject_id as string));
+  if (interestsFiltered.length === 0) return [];
+
+  const subjectIds = [...new Set(interestsFiltered.map((r) => r.subject_id as string))];
 
   const [{ data: brands, error: brandErr }, { data: profiles, error: profErr }] = await Promise.all([
     service
@@ -199,7 +215,7 @@ export async function loadBrandsYouReachedOutTo(
   const brandById = new Map((brands ?? []).map((b) => [b.id as string, b]));
   const emailById = new Map((profiles ?? []).map((p) => [p.id as string, p.email as string | null]));
 
-  return interests
+  return interestsFiltered
     .map((row) => {
       const sid = row.subject_id as string;
       const b = brandById.get(sid);
@@ -231,6 +247,8 @@ export async function loadTeamsYouReachedOutTo(
   service: SupabaseClient,
   brandManagerId: string
 ): Promise<TeamOpportunityRow[]> {
+  const struckTeamIds = await getStruckTeamIdsForBrand(service, brandManagerId);
+
   const { data: interests, error: intErr } = await service
     .from("discovery_interests")
     .select("id, subject_id, response, updated_at")
@@ -245,7 +263,10 @@ export async function loadTeamsYouReachedOutTo(
     return [];
   }
 
-  const subjectIds = [...new Set(interests.map((r) => r.subject_id as string))];
+  const interestsFiltered = interests.filter((r) => !struckTeamIds.has(r.subject_id as string));
+  if (interestsFiltered.length === 0) return [];
+
+  const subjectIds = [...new Set(interestsFiltered.map((r) => r.subject_id as string))];
 
   const [{ data: teams, error: teamErr }, { data: profiles, error: profErr }] = await Promise.all([
     service
@@ -263,7 +284,7 @@ export async function loadTeamsYouReachedOutTo(
   const teamById = new Map((teams ?? []).map((t) => [t.id as string, t]));
   const emailById = new Map((profiles ?? []).map((p) => [p.id as string, p.email as string | null]));
 
-  return interests
+  return interestsFiltered
     .map((row) => {
       const sid = row.subject_id as string;
       const t = teamById.get(sid);
@@ -300,6 +321,14 @@ export async function getCounterpartyContactForViewer(
   subjectType: "brand" | "team",
   subjectId: string
 ): Promise<CounterpartyResult | null> {
+  if (subjectType === "brand") {
+    const struck = await getStruckBrandIdsForTeam(service, viewerId);
+    if (struck.has(subjectId)) return null;
+  } else {
+    const struck = await getStruckTeamIdsForBrand(service, viewerId);
+    if (struck.has(subjectId)) return null;
+  }
+
   const { data: interest, error } = await service
     .from("discovery_interests")
     .select("id, response, updated_at")

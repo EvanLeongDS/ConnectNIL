@@ -63,6 +63,10 @@ export interface DeliverableRow {
   due_date: string | null;
   frequency: DeliverableFrequency;
   status: DeliverableStatus;
+  /** Filled when athlete/team submits proof (migration 016). */
+  proof_description?: string | null;
+  proof_image_urls?: string[] | null;
+  submitted_at?: string | null;
   created_at: string;
 }
 

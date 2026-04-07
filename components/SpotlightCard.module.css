@@ -1,0 +1,39 @@
+.cardSpotlight {
+  position: relative;
+  overflow: hidden;
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+}
+
+.cardSpotlight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* Fixed-size circle reads stronger than viewport-sized ellipse; keep fade in % for smooth edges */
+  background: radial-gradient(
+      circle 480px at var(--mouse-x) var(--mouse-y),
+      var(--spotlight-color, rgba(255, 255, 255, 0.32)),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle 220px at var(--mouse-x) var(--mouse-y),
+      var(--spotlight-color, rgba(255, 255, 255, 0.32)),
+      transparent 35%
+    );
+  opacity: 0.62;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cardSpotlight:hover::before,
+.cardSpotlight:focus-within::before {
+  opacity: 0.98;
+}
+
+/* Paint copy above the spotlight layer */
+.cardSpotlight > * {
+  position: relative;
+  z-index: 1;
+}

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ThemeToggle from "@/components/ThemeToggle";
+import Particles from "@/components/Particles";
+import SpotlightCard from "@/components/SpotlightCard";
 
 export default async function ConnectNILLandingPage() {
   const supabase = await createClient();
@@ -9,8 +11,27 @@ export default async function ConnectNILLandingPage() {
   } = await supabase.auth.getUser();
 
   return (
-    <div className="min-h-screen bg-white text-black dark:bg-[#0d1117] dark:text-white">
+    <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
+      {/* Full-viewport WebGL background (fixed so it doesn’t scroll away) */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute inset-0 bg-white dark:bg-[#0d1117]" aria-hidden />
+        <div className="absolute inset-0 z-[1]">
+          <Particles
+            particleCount={140}
+            particleSpread={18}
+            speed={0.07}
+            particleColors={["#1f7ae0", "#251bb6", "#93c5fd"]}
+            moveParticlesOnHover={true}
+            alphaParticles={false}
+            particleBaseSize={15}
+            sizeRandomness={0}
+            cameraDistance={20}
+            disableRotation={false}
+          />
+        </div>
+      </div>
 
+      <div className="relative z-10 min-h-screen">
       {/* ── Navbar ── */}
       <nav className="sticky top-0 z-20 border-b border-black/5 bg-white/90 backdrop-blur dark:border-white/5 dark:bg-[#0d1117]/90">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
@@ -104,20 +125,26 @@ export default async function ConnectNILLandingPage() {
               text: "Contracts, deliverables, and payments are organized in one place across the full season.",
             },
           ].map((item) => (
-            <div
+            <SpotlightCard
               key={item.title}
-              className="rounded-3xl bg-[#dbeafe] p-7 dark:bg-[#1a2f5a]"
+              className="rounded-[2.5rem] bg-[#dbeafe] p-8 shadow-sm dark:bg-[#1a2f5a] dark:shadow-none"
+              spotlightColor="rgba(31, 122, 224, 0.44)"
             >
-              <h3 className="text-xl font-bold text-[#1f7ae0] dark:text-[#93c5fd]">{item.title}</h3>
-              <p className="mt-3 text-base leading-7 text-[#1f7ae0] dark:text-[#93c5fd]/80">{item.text}</p>
-            </div>
+              <div className="relative pl-0.5 pt-0.5">
+                <h3 className="text-xl font-bold text-[#1f7ae0] dark:text-[#93c5fd]">{item.title}</h3>
+                <p className="mt-3 text-base leading-7 text-[#1f7ae0] dark:text-[#93c5fd]/80">{item.text}</p>
+              </div>
+            </SpotlightCard>
           ))}
         </div>
       </section>
 
       {/* ── About us ── */}
       <section id="about-us" className="mx-auto max-w-7xl px-6 py-10 md:px-10 md:pb-20">
-        <div className="rounded-[2rem] bg-[#dbeafe] p-8 dark:bg-[#1a2f5a] md:p-10">
+        <SpotlightCard
+          className="rounded-[2.5rem] bg-[#dbeafe] p-8 shadow-sm dark:bg-[#1a2f5a] dark:shadow-none md:p-10"
+          spotlightColor="rgba(31, 122, 224, 0.44)"
+        >
           <h2 className="text-3xl font-black tracking-tight text-[#1f7ae0] dark:text-[#93c5fd]">About us</h2>
           <p className="mt-4 max-w-4xl text-lg leading-8 text-[#1f7ae0] dark:text-[#93c5fd]/80">
             The idea for ConnectNIL arose in Boston University&apos;s entrepreneurship course, where we were tasked with creating a startup that can solve a real-world problem. We believe ConnectNIL can help fill a gap in the NIL market by providing a platform for teams and brands to connect and manage their partnerships.
@@ -125,9 +152,9 @@ export default async function ConnectNILLandingPage() {
           <p className="mt-4 max-w-4xl text-lg leading-8 text-[#1f7ae0] dark:text-[#93c5fd]/80">
             ConnectNIL helps teams and brands build organized, season-long NIL partnerships without the chaos of fragmented one-off deals. We focus on making the process simpler, more transparent, and easier to manage for everyone involved.
           </p>
-        </div>
+        </SpotlightCard>
       </section>
-
+      </div>
     </div>
   );
 }

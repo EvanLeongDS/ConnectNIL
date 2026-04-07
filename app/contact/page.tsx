@@ -205,13 +205,6 @@ export default function ContactPage() {
             >
               {status === "loading" ? "Sending…" : "Send Message →"}
             </button>
-
-            <p className="mt-4 text-center text-xs text-black/30 dark:text-white/25">
-              Or email us directly at{" "}
-              <a href="mailto:leonge1@bu.edu" className="text-[#1f7ae0] underline underline-offset-2">
-                leonge1@bu.edu
-              </a>
-            </p>
           </form>
         )}
 

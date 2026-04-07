@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { navigateAfterSignUp } from "@/lib/auth/signupRedirect";
 import AuthNav from "@/components/auth/AuthNav";
+import ParticlesBackground from "@/components/auth/ParticlesBackground";
 
 function SignupPageInner() {
   const router = useRouter();
@@ -56,27 +57,32 @@ function SignupPageInner() {
 
   if (success) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white px-8 dark:bg-[#0d1117]">
-        <AuthNav />
-        <div className="w-full max-w-sm space-y-4 text-center">
-          <div className="text-4xl">📬</div>
-          <h1 className="text-2xl font-bold text-black dark:text-white">Check your email</h1>
-          <p className="text-black/50 dark:text-white/50">
-            We sent a confirmation link to <strong className="text-black dark:text-white">{email}</strong>. Click it to activate your account.
-          </p>
-          <Link href="/login" className="block text-sm font-semibold text-[#1f7ae0] hover:underline">
-            Back to sign in
-          </Link>
-        </div>
-      </main>
+      <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
+        <ParticlesBackground />
+        <main className="relative z-10 flex min-h-screen items-center justify-center px-8">
+          <AuthNav />
+          <div className="w-full max-w-sm space-y-4 text-center">
+            <div className="text-4xl">📬</div>
+            <h1 className="text-2xl font-bold text-black dark:text-white">Check your email</h1>
+            <p className="text-black/50 dark:text-white/50">
+              We sent a confirmation link to <strong className="text-black dark:text-white">{email}</strong>. Click it to activate your account.
+            </p>
+            <Link href="/login" className="block text-sm font-semibold text-[#1f7ae0] hover:underline">
+              Back to sign in
+            </Link>
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-white px-8 dark:bg-[#0d1117]">
-      <AuthNav />
+    <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
+      <ParticlesBackground />
+      <main className="relative z-10 flex min-h-screen items-center justify-center px-8">
+        <AuthNav />
 
-      <div className="w-full max-w-sm space-y-6">
+        <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-black dark:text-white">Create an account</h1>
           {roleLabel && (
@@ -138,8 +144,9 @@ function SignupPageInner() {
             Sign in
           </Link>
         </p>
-      </div>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }
 
@@ -147,10 +154,13 @@ export default function SignupPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-white px-8 dark:bg-[#0d1117]">
-          <AuthNav />
-          <p className="text-sm text-black/50 dark:text-white/50">Loading…</p>
-        </main>
+        <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
+          <ParticlesBackground />
+          <main className="relative z-10 flex min-h-screen items-center justify-center px-8">
+            <AuthNav />
+            <p className="text-sm text-black/50 dark:text-white/50">Loading…</p>
+          </main>
+        </div>
       }
     >
       <SignupPageInner />

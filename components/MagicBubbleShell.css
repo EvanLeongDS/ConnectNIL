@@ -1,0 +1,54 @@
+/* Layered under content; does not affect box model beyond position/overflow on the same element */
+.magic-bubble-shell {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  --glow-x: 50%;
+  --glow-y: 50%;
+  --glow-intensity: 0;
+  --glow-radius: 320px;
+  --glow-color: 31, 122, 224;
+}
+
+.magic-bubble-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  opacity: calc(0.12 + var(--glow-intensity) * 0.35);
+  transition: opacity 0.2s ease;
+  background: radial-gradient(
+    circle var(--glow-radius) at var(--glow-x) var(--glow-y),
+    rgba(var(--glow-color), 0.35) 0%,
+    transparent 58%
+  );
+}
+
+.magic-bubble-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  opacity: var(--glow-intensity);
+  transition: opacity 0.2s ease;
+  background: radial-gradient(
+    var(--glow-radius) circle at var(--glow-x) var(--glow-y),
+    rgba(var(--glow-color), 0.65) 0%,
+    rgba(var(--glow-color), 0.28) 32%,
+    transparent 62%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.magic-bubble-shell > * {
+  position: relative;
+  z-index: 1;
+}

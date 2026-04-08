@@ -1,5 +1,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "../components/MagicBento.css";
+@import "../components/MagicBubbleShell.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

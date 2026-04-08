@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
+import MagicBubbleShell from "@/components/MagicBubbleShell";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -280,10 +281,10 @@ export default async function AthleteDashboard() {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-black/6 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
+    <MagicBubbleShell className="rounded-2xl border border-black/6 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
       <h2 className="mb-5 text-sm font-bold uppercase tracking-wider text-black/40 dark:text-white/35">{title}</h2>
       {children}
-    </div>
+    </MagicBubbleShell>
   );
 }
 
@@ -291,13 +292,13 @@ function StatCard({ label, value, sub, accent, warn }: {
   label: string; value: string; sub: string; accent?: boolean; warn?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
+    <MagicBubbleShell className="rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
       <p className="text-xs font-medium text-black/40 dark:text-white/35">{label}</p>
       <p className={`mt-1 text-2xl font-black tracking-tight ${accent ? "text-[#1f7ae0]" : warn ? "text-amber-500" : "text-black dark:text-white"}`}>
         {value}
       </p>
       <p className="mt-0.5 text-xs text-black/35 dark:text-white/30">{sub}</p>
-    </div>
+    </MagicBubbleShell>
   );
 }
 
@@ -341,10 +342,10 @@ function DealRow({ deal }: { deal: Partnership }) {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-black/5 bg-[#f9fafb] p-4 dark:border-white/5 dark:bg-white/3">
+    <MagicBubbleShell className="rounded-xl border border-black/5 bg-[#f9fafb] p-4 dark:border-white/5 dark:bg-white/3">
       <p className="text-xs text-black/40 dark:text-white/35">{label}</p>
       <p className="mt-1 text-xl font-black text-black dark:text-white">{value}</p>
-    </div>
+    </MagicBubbleShell>
   );
 }
 

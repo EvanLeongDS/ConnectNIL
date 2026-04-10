@@ -74,16 +74,12 @@ export default function ContactPage() {
       {/* ── Navbar ── */}
       <nav className="sticky top-0 z-20 border-b border-black/5 bg-white/90 backdrop-blur dark:border-white/5 dark:bg-[#0d1117]/90">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
-          <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-white text-lg font-black shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-white">
-              C
-            </div>
-            <div>
-              <div className="text-lg font-extrabold tracking-tight text-black dark:text-white">ConnectNIL</div>
-              <div className="text-xs uppercase tracking-[0.25em] text-black/45 dark:text-white/40">
-                Team Partnerships
-              </div>
-            </div>
+          <Link href="/" className="flex items-center transition hover:opacity-75">
+            <img
+              src="/connectnil-logo.png"
+              alt="ConnectNIL"
+              className="h-8 w-auto [mix-blend-mode:multiply] dark:invert dark:[mix-blend-mode:screen]"
+            />
           </Link>
           <div className="flex items-center gap-3">
             <ThemeToggle />

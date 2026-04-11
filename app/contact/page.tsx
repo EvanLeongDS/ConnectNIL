@@ -48,6 +48,10 @@ export default function ContactPage() {
       });
       const data = await res.json();
 
+      // #region agent log
+      fetch('http://127.0.0.1:7364/ingest/e4562ef6-100d-491e-9aae-be85661ee21a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'767379'},body:JSON.stringify({sessionId:'767379',location:'contact/page.tsx:handleSubmit',message:'api-response',data:{status:res.status,ok:res.ok,body:data},timestamp:Date.now(),hypothesisId:'A-B-C-D'})}).catch(()=>{});
+      // #endregion
+
       if (!res.ok) {
         setServerError(data.error ?? "Something went wrong. Please try again.");
         setStatus("error");
@@ -55,7 +59,10 @@ export default function ContactPage() {
         setStatus("success");
         setForm({ name: "", email: "", subject: "", message: "" });
       }
-    } catch {
+    } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7364/ingest/e4562ef6-100d-491e-9aae-be85661ee21a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'767379'},body:JSON.stringify({sessionId:'767379',location:'contact/page.tsx:catch',message:'network-error',data:{err:String(err)},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       setServerError("Network error. Please check your connection.");
       setStatus("error");
     }

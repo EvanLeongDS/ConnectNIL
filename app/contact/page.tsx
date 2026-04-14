@@ -53,7 +53,8 @@ export default function ContactPage() {
       // #endregion
 
       if (!res.ok) {
-        setServerError(data.error ?? "Something went wrong. Please try again.");
+        const _debugInfo = data._debug ? ` [debug: ${JSON.stringify(data._debug)}]` : '';
+        setServerError((data.error ?? "Something went wrong. Please try again.") + _debugInfo);
         setStatus("error");
       } else {
         setStatus("success");

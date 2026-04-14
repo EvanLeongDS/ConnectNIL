@@ -103,6 +103,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("Contact route error:", err);
-    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
+    // #region agent log
+    const _errMsg = err instanceof Error ? err.message : String(err);
+    const _hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const _hasSvc = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+    return NextResponse.json({ error: "Something went wrong.", _debug: { thrown: _errMsg, hasUrl: _hasUrl, hasSvcRole: _hasSvc } }, { status: 500 });
+    // #endregion
   }
 }

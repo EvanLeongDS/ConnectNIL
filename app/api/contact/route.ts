@@ -29,14 +29,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid email address." }, { status: 400 });
     }
 
-    // #region agent log
-    const _hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const _hasAnon = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    const _hasSvcRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const _hasResend = !!process.env.RESEND_API_KEY;
-    console.error('[debug-767379] env-check', JSON.stringify({ hasUrl: _hasUrl, hasAnon: _hasAnon, hasSvcRole: _hasSvcRole, hasResend: _hasResend }));
-    // #endregion
-
     // 1. Save to Supabase using service role (bypasses anon RLS for insert)
     const supabase = await createServiceClient();
     const { error: dbError } = await supabase
@@ -45,9 +37,7 @@ export async function POST(request: NextRequest) {
 
     if (dbError) {
       console.error("Supabase insert error:", dbError);
-      // #region agent log
-      return NextResponse.json({ error: "Failed to save message.", _debug: { code: dbError.code, message: dbError.message, hint: dbError.hint } }, { status: 500 });
-      // #endregion
+      return NextResponse.json({ error: "Failed to save message." }, { status: 500 });
     }
 
     // 2. Send notification email to ConnectNIL inbox
@@ -103,11 +93,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("Contact route error:", err);
-    // #region agent log
-    const _errMsg = err instanceof Error ? err.message : String(err);
-    const _hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const _hasSvc = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
-    return NextResponse.json({ error: "Something went wrong.", _debug: { thrown: _errMsg, hasUrl: _hasUrl, hasSvcRole: _hasSvc } }, { status: 500 });
-    // #endregion
+    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   }
 }

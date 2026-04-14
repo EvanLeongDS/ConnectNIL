@@ -110,7 +110,7 @@ export default async function AthleteProfilePage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-black/6 bg-white p-6 shadow-sm dark:border-white/6 dark:bg-white/3">
+    <div className="rounded-2xl border border-black/6 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
       <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-black/35 dark:text-white/30">{title}</h2>
       <div className="space-y-3">{children}</div>
     </div>

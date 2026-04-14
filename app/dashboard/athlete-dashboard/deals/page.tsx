@@ -145,7 +145,7 @@ export default async function AthleteDealsPage() {
           ].map(({ label, value }) => (
             <div
               key={label}
-              className="rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/6 dark:bg-white/3"
+              className="rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none"
             >
               <p className="text-xs text-black/40 dark:text-white/35">{label}</p>
               <p className="mt-1 text-2xl font-black text-black dark:text-white">{value}</p>
@@ -164,7 +164,7 @@ export default async function AthleteDealsPage() {
                   <Link
                     key={deal.id}
                     href={`/dashboard/athlete-dashboard/deals/${deal.id}`}
-                    className="flex items-center gap-4 rounded-2xl border border-black/6 bg-white px-5 py-4 shadow-sm transition hover:border-black/12 dark:border-white/6 dark:bg-white/3 dark:hover:border-white/12"
+                    className="flex items-center gap-4 rounded-2xl border border-black/6 bg-white px-5 py-4 shadow-sm transition hover:border-black/12 dark:border-white/10 dark:bg-[#161b27] dark:shadow-none dark:hover:border-white/20 dark:hover:bg-white/[0.05]"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-black dark:text-white">{deal.title}</p>
@@ -193,7 +193,7 @@ export default async function AthleteDealsPage() {
         })}
 
         {deals.length === 0 && (
-          <div className="rounded-2xl border border-black/6 bg-white py-16 text-center shadow-sm dark:border-white/6 dark:bg-white/3">
+          <div className="rounded-2xl border border-black/6 bg-white py-16 text-center shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
             <p className="text-4xl">🤝</p>
             <p className="mt-3 font-semibold text-black/60 dark:text-white/50">No deals yet</p>
             <p className="mt-1 text-sm text-black/35 dark:text-white/30">

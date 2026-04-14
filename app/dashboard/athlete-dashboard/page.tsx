@@ -317,7 +317,7 @@ function DealRow({ deal }: { deal: Partnership }) {
   return (
     <Link
       href={`/dashboard/athlete-dashboard/deals/${deal.id}`}
-      className="flex items-center gap-4 rounded-xl border border-black/5 bg-[#f9fafb] px-4 py-3 transition-colors hover:border-black/10 hover:bg-black/[0.02] dark:border-white/5 dark:bg-white/3 dark:hover:border-white/10 dark:hover:bg-white/[0.05]"
+      className="flex items-center gap-4 rounded-xl border border-black/5 bg-[#f9fafb] px-4 py-3 transition-colors hover:border-black/10 hover:bg-black/[0.02] dark:border-white/8 dark:bg-white/[0.04] dark:hover:border-white/15 dark:hover:bg-white/[0.07]"
     >
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-black dark:text-white">{deal.title}</p>

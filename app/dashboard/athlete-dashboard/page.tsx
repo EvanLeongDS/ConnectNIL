@@ -342,10 +342,10 @@ function DealRow({ deal }: { deal: Partnership }) {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <MagicBubbleShell className="rounded-xl border border-black/8 bg-[#f9fafb] p-4 dark:border-white/10 dark:bg-[#1e2536]">
-      <p className="text-xs text-black/45 dark:text-white/50">{label}</p>
+    <div className="rounded-xl border border-black/8 bg-black/[0.03] p-4 dark:border-white/8 dark:bg-white/[0.04]">
+      <p className="text-xs text-black/45 dark:text-white/45">{label}</p>
       <p className="mt-1 text-xl font-black text-black dark:text-white">{value}</p>
-    </MagicBubbleShell>
+    </div>
   );
 }
 

@@ -299,10 +299,10 @@ function ProfileRow({ label, value }: { label: string; value?: string }) {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <MagicBubbleShell className="rounded-xl border border-black/5 bg-[#f9fafb] p-4 dark:border-white/5 dark:bg-[#1c2333]">
-      <p className="text-xs text-black/40 dark:text-white/35">{label}</p>
+    <div className="rounded-xl border border-black/8 bg-black/[0.03] p-4 dark:border-white/8 dark:bg-white/[0.04]">
+      <p className="text-xs text-black/45 dark:text-white/45">{label}</p>
       <p className="mt-1 text-xl font-black text-black dark:text-white">{value}</p>
-    </MagicBubbleShell>
+    </div>
   );
 }
 

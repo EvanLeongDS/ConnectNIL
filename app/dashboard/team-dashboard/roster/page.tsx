@@ -30,7 +30,6 @@ export default async function TeamRosterPage() {
       accepted_at: r.accepted_at,
     })) ?? [];
 
-  const emailDeliveryConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
   const siteBaseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
 
   const athleteEmails: string[] = profile.athlete_emails ?? [];
@@ -54,7 +53,6 @@ export default async function TeamRosterPage() {
           initialEmails={athleteEmails}
           invitations={invitations}
           numPlayers={profile.num_players}
-          emailDeliveryConfigured={emailDeliveryConfigured}
           siteBaseUrl={siteBaseUrl}
         />
       </main>

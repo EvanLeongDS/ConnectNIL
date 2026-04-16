@@ -15,7 +15,6 @@ type Props = {
   initialEmails: string[];
   invitations: InvitationRow[];
   numPlayers: number;
-  emailDeliveryConfigured: boolean;
   siteBaseUrl: string;
 };
 
@@ -37,19 +36,13 @@ function statusFor(
   if (inv.opened_at) {
     return { label: "Opened link", className: "bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" };
   }
-  if (inv.email_sent_at) {
-    return { label: "Sent", className: "bg-[#dbeafe] text-[#1d4ed8] dark:bg-blue-950/50 dark:text-blue-300" };
-  }
   if (inv.token) {
     return {
       label: "Link ready",
       className: "bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
     };
   }
-  return {
-    label: "Pending send",
-    className: "bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-  };
+  return { label: "Draft", className: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" };
 }
 
 function buildInviteUrl(siteBaseUrl: string, token: string) {
@@ -62,7 +55,6 @@ export default function TeamRosterClient({
   initialEmails,
   invitations,
   numPlayers,
-  emailDeliveryConfigured,
   siteBaseUrl,
 }: Props) {
   const router = useRouter();
@@ -73,7 +65,6 @@ export default function TeamRosterClient({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [sendingPending, setSendingPending] = useState(false);
   /** Links returned from the last successful “create invites” call—visible immediately without waiting on refresh. */
   const [lastCreatedLinks, setLastCreatedLinks] = useState<{ email: string; inviteUrl: string }[] | null>(null);
 
@@ -92,15 +83,7 @@ export default function TeamRosterClient({
 
   const pct = numPlayers > 0 ? Math.min(100, Math.round((acceptedCount / numPlayers) * 100)) : 0;
 
-  const showManualDeliveryHint = useMemo(
-    () => invitations.some((i) => i.token && !i.email_sent_at),
-    [invitations]
-  );
-
-  const pendingEmailCount = useMemo(
-    () => invitations.filter((i) => i.token && !i.email_sent_at && !i.accepted_at).length,
-    [invitations]
-  );
+  // Note: We intentionally generate links only (no email delivery).
 
   function addEmail() {
     setError(null);
@@ -126,11 +109,11 @@ export default function TeamRosterClient({
     setEmails((prev) => prev.filter((x) => x !== e));
   }
 
-  async function sendInvites() {
+  async function createInviteLinks() {
     setError(null);
     setInfo(null);
     if (emails.length === 0) {
-      setError("Add at least one email before sending.");
+      setError("Add at least one email before creating links.");
       return;
     }
     setSending(true);
@@ -140,112 +123,32 @@ export default function TeamRosterClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emails }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(typeof data.error === "string" ? data.error : "Could not send invites.");
-        return;
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        // ignore
       }
-      const resultRows = Array.isArray(data.results)
-        ? (data.results as { email: string; ok: boolean; error?: string }[])
-        : [];
-      const failedSends = resultRows.filter((r) => !r.ok);
-      if (failedSends.length > 0) {
+      if (!res.ok) {
+        const fallbackText = typeof data?.error === "string" ? "" : await res.text().catch(() => "");
         setError(
-          failedSends.map((r) => `${r.email}: ${r.error ?? "failed"}`).join(" · ") +
-            (data.emailDeliveryConfigured
-              ? " — In Resend, verify your sending domain and set RESEND_FROM to a verified address for real delivery."
-              : "")
+          typeof data.error === "string"
+            ? data.error
+            : fallbackText
+              ? `Could not create links (HTTP ${res.status}): ${fallbackText.slice(0, 160)}`
+              : `Could not create links (HTTP ${res.status}).`
         );
+        return;
       }
-      if (data.emailDeliveryConfigured === false && Array.isArray(data.manualLinks) && data.manualLinks.length > 0) {
-        setLastCreatedLinks(
-          data.manualLinks as { email: string; inviteUrl: string }[]
-        );
-        setInfo(
-          `Created ${data.manualLinks.length} invite link${data.manualLinks.length === 1 ? "" : "s"} below. Share each URL with the matching athlete (they stay valid until signup). Add RESEND_API_KEY to send these by email automatically.`
-        );
-      } else if (typeof data.sent === "number" && data.sent > 0) {
-        setInfo(
-          failedSends.length
-            ? `Sent ${data.sent} invite email(s); some failed (see above).`
-            : `Sent ${data.sent} invite email${data.sent === 1 ? "" : "s"}.`
-        );
-      } else if (
-        failedSends.length === 0 &&
-        data.emailDeliveryConfigured &&
-        data.sent === 0 &&
-        typeof data.skipped === "number" &&
-        data.skipped > 0
-      ) {
-        setInfo("All listed athletes were already emailed; no new sends.");
-      }
-      if (data.emailDeliveryConfigured !== false) {
-        setLastCreatedLinks(null);
+      if (Array.isArray(data.manualLinks) && data.manualLinks.length > 0) {
+        setLastCreatedLinks(data.manualLinks as { email: string; inviteUrl: string }[]);
+        setInfo(`Created ${data.manualLinks.length} invite link${data.manualLinks.length === 1 ? "" : "s"} below.`);
+      } else {
+        setInfo("No links were created.");
       }
       router.refresh();
     } finally {
       setSending(false);
-    }
-  }
-
-  async function resendAllEmails() {
-    setError(null);
-    setInfo(null);
-    if (!emailDeliveryConfigured) {
-      setError("Email delivery isn’t configured yet.");
-      return;
-    }
-    const resendable = invitations
-      .filter((i) => i.token && !i.accepted_at)
-      .map((i) => normalize(i.email));
-    if (resendable.length === 0) {
-      setInfo("No invite emails available to resend.");
-      return;
-    }
-    setSending(true);
-    try {
-      const res = await fetch("/api/team/send-athlete-invites", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails: resendable, resendExisting: true }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(typeof data.error === "string" ? data.error : "Could not resend invites.");
-        return;
-      }
-      const sent = typeof data.sent === "number" ? data.sent : 0;
-      setInfo(sent > 0 ? `Resent ${sent} invite email${sent === 1 ? "" : "s"}.` : "No invites were resent.");
-      router.refresh();
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function sendPendingEmails() {
-    setError(null);
-    setInfo(null);
-    if (!emailDeliveryConfigured) {
-      setError("Email delivery isn’t configured yet.");
-      return;
-    }
-    if (pendingEmailCount === 0) {
-      setInfo("No pending invite emails to send.");
-      return;
-    }
-    setSendingPending(true);
-    try {
-      const res = await fetch("/api/team/send-pending-athlete-invites", { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(typeof data.error === "string" ? data.error : "Could not send pending emails.");
-        return;
-      }
-      const sent = typeof data.sent === "number" ? data.sent : 0;
-      setInfo(sent > 0 ? `Sent ${sent} pending invite email${sent === 1 ? "" : "s"}.` : "No pending invite emails to send.");
-      router.refresh();
-    } finally {
-      setSendingPending(false);
     }
   }
 
@@ -309,31 +212,11 @@ export default function TeamRosterClient({
             Invite athletes
           </h2>
           <p className="mt-1 text-sm text-black/45 dark:text-white/40">
-            Add .edu emails, then {emailDeliveryConfigured ? "send invite emails" : "create invite links"}. Athletes use
-            the link to open athlete signup.
+            Add .edu emails, then create invite links. Athletes use the link to open athlete signup.
           </p>
         </div>
 
         <div className="space-y-4 px-6 py-5">
-          {(showManualDeliveryHint || !emailDeliveryConfigured) && (
-            <div className="rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-200">
-              {!emailDeliveryConfigured
-                ? "Email delivery isn’t configured yet (set RESEND_API_KEY). Invite links still work—use Copy link in the list below for each athlete until mail is enabled."
-                : "Some athletes have a link ready but no automated email was sent yet—use Copy link to share manually if needed."}
-              {emailDeliveryConfigured && pendingEmailCount > 0 && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={sendPendingEmails}
-                    disabled={sendingPending}
-                    className="rounded-full bg-amber-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-60 dark:bg-amber-500 dark:hover:bg-amber-400"
-                  >
-                    {sendingPending ? "Sending…" : `Send pending emails (${pendingEmailCount})`}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
           {info && (
             <div className="rounded-lg border border-[#1f7ae0]/30 bg-[#1f7ae0]/8 px-3 py-2 text-sm text-[#0d5cb6] dark:border-[#1f7ae0]/35 dark:bg-[#1f7ae0]/15 dark:text-blue-200">
               {info}
@@ -389,39 +272,13 @@ export default function TeamRosterClient({
           <button
             type="button"
             disabled={sending || emails.length === 0}
-            onClick={sendInvites}
+            onClick={createInviteLinks}
             className="w-full rounded-full bg-[#1f7ae0] py-3 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 sm:w-auto sm:px-10"
           >
-            {sending
-              ? emailDeliveryConfigured
-                ? "Sending…"
-                : "Preparing…"
-              : emailDeliveryConfigured
-                ? "Send email invites"
-                : "Create invite links"}
+            {sending ? "Creating…" : "Create invite links"}
           </button>
-          {emailDeliveryConfigured && (
-            <button
-              type="button"
-              disabled={sending}
-              onClick={resendAllEmails}
-              className="w-full rounded-full border border-[#1f7ae0]/35 bg-[#1f7ae0]/10 py-3 text-sm font-semibold text-[#1f7ae0] transition hover:bg-[#1f7ae0]/15 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:px-10"
-            >
-              Resend all emails
-            </button>
-          )}
           <p className="text-xs text-black/38 dark:text-white/30">
-            {emailDeliveryConfigured ? (
-              <>
-                New addresses receive an email with a secure link to signup. Already-emailed rows are skipped by default,
-                but you can resend anytime.
-              </>
-            ) : (
-              <>
-                Without email configured, new addresses get a secure link you copy and share yourself. Already-emailed
-                rows (if you later enable mail) are skipped the same way.
-              </>
-            )}
+            Links stay valid until the athlete completes signup.
           </p>
 
           {lastCreatedLinks && lastCreatedLinks.length > 0 && (
@@ -479,8 +336,7 @@ export default function TeamRosterClient({
             {emails.map((email, i) => {
               const { label, className } = statusFor(email, byEmail);
               const inv = byEmail.get(normalize(email));
-              const canCopy = Boolean(inv?.token && !inv.email_sent_at);
-              const canResend = Boolean(emailDeliveryConfigured && inv?.token && !inv.accepted_at);
+              const canCopy = Boolean(inv?.token);
               return (
                 <li key={email} className="flex flex-wrap items-center gap-4 px-6 py-4 sm:flex-nowrap">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#dbeafe] text-sm font-bold text-[#1f7ae0]">
@@ -498,40 +354,6 @@ export default function TeamRosterClient({
                         className="rounded-full border border-[#1f7ae0]/40 bg-[#1f7ae0]/10 px-3 py-1 text-xs font-semibold text-[#1f7ae0] transition hover:bg-[#1f7ae0]/18 dark:text-[#5aa9f0]"
                       >
                         Copy link
-                      </button>
-                    )}
-                    {canResend && inv?.email && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setError(null);
-                          setInfo(null);
-                          setSendingPending(true);
-                          try {
-                            const res = await fetch("/api/team/send-athlete-invites", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                emails: [normalize(inv.email)],
-                                resendExisting: true,
-                              }),
-                            });
-                            const data = await res.json().catch(() => ({}));
-                            if (!res.ok) {
-                              setError(typeof data.error === "string" ? data.error : "Could not resend.");
-                              return;
-                            }
-                            const sent = typeof data.sent === "number" ? data.sent : 0;
-                            setInfo(sent ? `Resent invite to ${inv.email}.` : `No resend performed for ${inv.email}.`);
-                            router.refresh();
-                          } finally {
-                            setSendingPending(false);
-                          }
-                        }}
-                        disabled={sendingPending}
-                        className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-400/15 dark:text-amber-300"
-                      >
-                        Resend
                       </button>
                     )}
                     <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{label}</span>

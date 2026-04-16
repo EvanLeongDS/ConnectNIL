@@ -77,8 +77,8 @@ function ChipToggle({
           onClick={() => toggle(opt)}
           className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-all ${
             selected.includes(opt)
-              ? "border-[#1f7ae0] bg-[#1f7ae0] text-white shadow-sm"
-              : "border-black/12 bg-white text-black/65 hover:border-[#1f7ae0]/50 dark:border-white/12 dark:bg-white/5 dark:text-white/65"
+              ? "border-[#1f7ae0] bg-[#1f7ae0] text-white shadow-sm dark:border-[#1f7ae0]/70 dark:bg-[#1a3a6e] dark:text-white"
+              : "border-black/12 bg-white text-black/65 hover:border-[#1f7ae0]/50 dark:border-white/10 dark:bg-white/[0.03] dark:text-white/55 dark:hover:border-[#1f7ae0]/40"
           }`}
         >
           {opt}
@@ -253,7 +253,7 @@ export default function TeamProfileEditor({
       )}
 
       {composedPreview && (
-        <div className="rounded-xl border border-[#1f7ae0]/25 bg-[#dbeafe]/50 px-4 py-3 text-sm dark:border-[#1f7ae0]/30 dark:bg-[#1a2f5a]/50">
+        <div className="rounded-xl border border-[#1f7ae0]/25 bg-[#dbeafe]/50 px-4 py-3 text-sm dark:border-[#1f7ae0]/20 dark:bg-[#1f7ae0]/[0.07]">
           <span className="font-semibold text-[#1f7ae0] dark:text-[#93c5fd]">Team and sport: </span>
           <span className="text-black dark:text-white">{composedPreview}</span>
         </div>
@@ -317,8 +317,8 @@ export default function TeamProfileEditor({
                 onClick={() => toggleDeal(dt.value)}
                 className={`w-full rounded-xl border p-3 text-left text-sm transition ${
                   active
-                    ? "border-[#1f7ae0] bg-[#dbeafe] dark:bg-[#1a2f5a]"
-                    : "border-black/10 bg-white dark:border-white/10 dark:bg-white/5"
+                    ? "border-[#1f7ae0] bg-[#dbeafe] dark:border-[#1f7ae0]/50 dark:bg-[#111e38]"
+                    : "border-black/10 bg-white dark:border-white/8 dark:bg-white/[0.03]"
                 }`}
               >
                 <span className="font-bold text-black dark:text-white">{dt.label}</span>
@@ -343,8 +343,8 @@ export default function TeamProfileEditor({
                 onClick={() => setAvailability(opt.value)}
                 className={`rounded-xl border p-3 text-left text-sm transition ${
                   active
-                    ? "border-[#1f7ae0] bg-[#dbeafe] dark:bg-[#1a2f5a]"
-                    : "border-black/10 bg-white dark:border-white/10 dark:bg-white/5"
+                    ? "border-[#1f7ae0] bg-[#dbeafe] dark:border-[#1f7ae0]/50 dark:bg-[#111e38]"
+                    : "border-black/10 bg-white dark:border-white/8 dark:bg-white/[0.03]"
                 }`}
               >
                 <span className="font-bold text-black dark:text-white">{opt.label}</span>

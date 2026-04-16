@@ -140,8 +140,8 @@ function ChipToggle({
             onClick={() => toggle(opt)}
             className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-all ${
               active
-                ? "border-[#1f7ae0] bg-[#1f7ae0] text-white shadow-sm"
-                : "border-black/12 bg-white text-black/65 hover:border-[#1f7ae0]/50 dark:border-white/12 dark:bg-white/5 dark:text-white/65"
+                ? "border-[#1f7ae0] bg-[#1f7ae0] text-white shadow-sm dark:border-[#1f7ae0]/70 dark:bg-[#1a3a6e] dark:text-white"
+                : "border-black/12 bg-white text-black/65 hover:border-[#1f7ae0]/50 dark:border-white/10 dark:bg-white/[0.03] dark:text-white/55 dark:hover:border-[#1f7ae0]/40"
             }`}
           >
             {opt}
@@ -398,7 +398,7 @@ export default function BrandProfileEditor({
             {preferredSchools.map((s) => (
               <span
                 key={s}
-                className="inline-flex items-center gap-1 rounded-full border border-black/8 bg-[#f9fafb] px-3 py-1 text-xs font-medium dark:border-white/8 dark:bg-[#1c2333]"
+                className="inline-flex items-center gap-1 rounded-full border border-black/8 bg-[#f9fafb] px-3 py-1 text-xs font-medium dark:border-white/8 dark:bg-white/[0.04]"
               >
                 {s}
                 <button type="button" className="text-black/40 hover:text-red-500 dark:text-white/40" onClick={() => setPreferredSchools((p) => p.filter((x) => x !== s))}>
@@ -424,8 +424,8 @@ export default function BrandProfileEditor({
                 onClick={() => toggleCampaign(ct.value)}
                 className={`w-full rounded-xl border p-3 text-left text-sm transition ${
                   active
-                    ? "border-[#1f7ae0] bg-[#dbeafe] dark:bg-[#1a2f5a]"
-                    : "border-black/10 bg-white dark:border-white/10 dark:bg-white/5"
+                    ? "border-[#1f7ae0] bg-[#dbeafe] dark:border-[#1f7ae0]/50 dark:bg-[#111e38]"
+                    : "border-black/10 bg-white dark:border-white/8 dark:bg-white/[0.03]"
                 }`}
               >
                 <span className="font-bold text-black dark:text-white">{ct.label}</span>

@@ -73,6 +73,7 @@ export default function TeamRosterClient({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [sendingPending, setSendingPending] = useState(false);
   /** Links returned from the last successful “create invites” call—visible immediately without waiting on refresh. */
   const [lastCreatedLinks, setLastCreatedLinks] = useState<{ email: string; inviteUrl: string }[] | null>(null);
 
@@ -93,6 +94,11 @@ export default function TeamRosterClient({
 
   const showManualDeliveryHint = useMemo(
     () => invitations.some((i) => i.token && !i.email_sent_at),
+    [invitations]
+  );
+
+  const pendingEmailCount = useMemo(
+    () => invitations.filter((i) => i.token && !i.email_sent_at && !i.accepted_at).length,
     [invitations]
   );
 
@@ -182,6 +188,33 @@ export default function TeamRosterClient({
     }
   }
 
+  async function sendPendingEmails() {
+    setError(null);
+    setInfo(null);
+    if (!emailDeliveryConfigured) {
+      setError("Email delivery isn’t configured yet.");
+      return;
+    }
+    if (pendingEmailCount === 0) {
+      setInfo("No pending invite emails to send.");
+      return;
+    }
+    setSendingPending(true);
+    try {
+      const res = await fetch("/api/team/send-pending-athlete-invites", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data.error === "string" ? data.error : "Could not send pending emails.");
+        return;
+      }
+      const sent = typeof data.sent === "number" ? data.sent : 0;
+      setInfo(sent > 0 ? `Sent ${sent} pending invite email${sent === 1 ? "" : "s"}.` : "No pending invite emails to send.");
+      router.refresh();
+    } finally {
+      setSendingPending(false);
+    }
+  }
+
   async function copyInviteUrl(token: string) {
     const url = buildInviteUrl(siteBaseUrl, token);
     try {
@@ -253,6 +286,18 @@ export default function TeamRosterClient({
               {!emailDeliveryConfigured
                 ? "Email delivery isn’t configured yet (set RESEND_API_KEY). Invite links still work—use Copy link in the list below for each athlete until mail is enabled."
                 : "Some athletes have a link ready but no automated email was sent yet—use Copy link to share manually if needed."}
+              {emailDeliveryConfigured && pendingEmailCount > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={sendPendingEmails}
+                    disabled={sendingPending}
+                    className="rounded-full bg-amber-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-700 disabled:opacity-60 dark:bg-amber-500 dark:hover:bg-amber-400"
+                  >
+                    {sendingPending ? "Sending…" : `Send pending emails (${pendingEmailCount})`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
           {info && (

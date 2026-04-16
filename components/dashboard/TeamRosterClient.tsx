@@ -188,6 +188,40 @@ export default function TeamRosterClient({
     }
   }
 
+  async function resendAllEmails() {
+    setError(null);
+    setInfo(null);
+    if (!emailDeliveryConfigured) {
+      setError("Email delivery isn’t configured yet.");
+      return;
+    }
+    const resendable = invitations
+      .filter((i) => i.token && !i.accepted_at)
+      .map((i) => normalize(i.email));
+    if (resendable.length === 0) {
+      setInfo("No invite emails available to resend.");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch("/api/team/send-athlete-invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: resendable, resendExisting: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data.error === "string" ? data.error : "Could not resend invites.");
+        return;
+      }
+      const sent = typeof data.sent === "number" ? data.sent : 0;
+      setInfo(sent > 0 ? `Resent ${sent} invite email${sent === 1 ? "" : "s"}.` : "No invites were resent.");
+      router.refresh();
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function sendPendingEmails() {
     setError(null);
     setInfo(null);
@@ -366,11 +400,21 @@ export default function TeamRosterClient({
                 ? "Send email invites"
                 : "Create invite links"}
           </button>
+          {emailDeliveryConfigured && (
+            <button
+              type="button"
+              disabled={sending}
+              onClick={resendAllEmails}
+              className="w-full rounded-full border border-[#1f7ae0]/35 bg-[#1f7ae0]/10 py-3 text-sm font-semibold text-[#1f7ae0] transition hover:bg-[#1f7ae0]/15 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:px-10"
+            >
+              Resend all emails
+            </button>
+          )}
           <p className="text-xs text-black/38 dark:text-white/30">
             {emailDeliveryConfigured ? (
               <>
-                New addresses receive an email with a secure link to signup. Addresses that were already emailed are
-                skipped automatically; to resend, you’ll need support to reset that invite.
+                New addresses receive an email with a secure link to signup. Already-emailed rows are skipped by default,
+                but you can resend anytime.
               </>
             ) : (
               <>
@@ -436,6 +480,7 @@ export default function TeamRosterClient({
               const { label, className } = statusFor(email, byEmail);
               const inv = byEmail.get(normalize(email));
               const canCopy = Boolean(inv?.token && !inv.email_sent_at);
+              const canResend = Boolean(emailDeliveryConfigured && inv?.token && !inv.accepted_at);
               return (
                 <li key={email} className="flex flex-wrap items-center gap-4 px-6 py-4 sm:flex-nowrap">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#dbeafe] text-sm font-bold text-[#1f7ae0]">
@@ -453,6 +498,40 @@ export default function TeamRosterClient({
                         className="rounded-full border border-[#1f7ae0]/40 bg-[#1f7ae0]/10 px-3 py-1 text-xs font-semibold text-[#1f7ae0] transition hover:bg-[#1f7ae0]/18 dark:text-[#5aa9f0]"
                       >
                         Copy link
+                      </button>
+                    )}
+                    {canResend && inv?.email && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setError(null);
+                          setInfo(null);
+                          setSendingPending(true);
+                          try {
+                            const res = await fetch("/api/team/send-athlete-invites", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                emails: [normalize(inv.email)],
+                                resendExisting: true,
+                              }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                              setError(typeof data.error === "string" ? data.error : "Could not resend.");
+                              return;
+                            }
+                            const sent = typeof data.sent === "number" ? data.sent : 0;
+                            setInfo(sent ? `Resent invite to ${inv.email}.` : `No resend performed for ${inv.email}.`);
+                            router.refresh();
+                          } finally {
+                            setSendingPending(false);
+                          }
+                        }}
+                        disabled={sendingPending}
+                        className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-400/15 dark:text-amber-300"
+                      >
+                        Resend
                       </button>
                     )}
                     <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{label}</span>

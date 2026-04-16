@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    let body: { emails?: string[] };
+    let body: { emails?: string[]; resendExisting?: boolean };
     try {
       body = await request.json();
     } catch {
@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     const raw = Array.isArray(body.emails) ? body.emails : [];
+    const resendExisting = Boolean(body.resendExisting);
     const seen = new Set<string>();
     const emails: string[] = [];
     for (const r of raw) {
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
     for (const email of emails) {
       const { data: existing, error: invSelectErr } = await service
         .from("team_athlete_invitations")
-        .select("token, email_sent_at")
+        .select("token, email_sent_at, accepted_at")
         .eq("team_id", user.id)
         .eq("email", email)
         .maybeSingle();
@@ -140,7 +141,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (existing?.email_sent_at) {
+      if (existing?.accepted_at) {
         results.push({ email, ok: true, skipped: true });
         continue;
       }
@@ -149,6 +150,11 @@ export async function POST(request: NextRequest) {
 
       if (!emailDeliveryConfigured) {
         results.push({ email, ok: true, manual: true, inviteUrl });
+        continue;
+      }
+
+      if (existing?.email_sent_at && !resendExisting) {
+        results.push({ email, ok: true, skipped: true });
         continue;
       }
 

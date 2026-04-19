@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import ThemeToggle from "@/components/ThemeToggle";
 import Particles from "@/components/Particles";
 import SpotlightCard from "@/components/SpotlightCard";
+import LandingFaq from "@/components/landing/LandingFaq";
 
 export default async function ConnectNILLandingPage() {
   const supabase = await createClient();
@@ -53,6 +54,9 @@ export default async function ConnectNILLandingPage() {
             </a>
             <a href="#about-us" className="text-base font-semibold text-black/70 transition hover:text-black dark:text-white/70 dark:hover:text-white">
               About us
+            </a>
+            <a href="#faq" className="text-base font-semibold text-black/70 transition hover:text-black dark:text-white/70 dark:hover:text-white">
+              FAQ
             </a>
             <Link href="/contact" className="text-base font-semibold text-black/70 transition hover:text-black dark:text-white/70 dark:hover:text-white">
               Contact
@@ -152,6 +156,8 @@ export default async function ConnectNILLandingPage() {
           </p>
         </SpotlightCard>
       </section>
+
+      <LandingFaq />
       </div>
     </div>
   );

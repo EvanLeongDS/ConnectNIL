@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 export async function POST(
   request: NextRequest,
@@ -35,27 +35,77 @@ export async function POST(
     .eq("athlete_id", user.id)
     .maybeSingle();
 
-  if (!row) return NextResponse.json({ error: "You are not on the roster for this deal." }, { status: 404 });
-  if (row.status !== "invited") {
-    return NextResponse.json({ error: "You have already responded to this deal." }, { status: 409 });
-  }
-
   const now = new Date().toISOString();
-  const updates =
-    action === "accept"
-      ? { status: "accepted" as const, responded_at: now }
-      : { status: "declined" as const, responded_at: now };
+  const newStatus = action === "accept" ? ("accepted" as const) : ("declined" as const);
 
-  const { error: upErr } = await supabase
-    .from("partnership_participants")
-    .update(updates)
-    .eq("id", row.id)
-    .eq("athlete_id", user.id);
+  // Athlete already has a participation row — just update it
+  if (row) {
+    if (row.status !== "invited") {
+      return NextResponse.json({ error: "You have already responded to this deal." }, { status: 409 });
+    }
+    const { error: upErr } = await supabase
+      .from("partnership_participants")
+      .update({ status: newStatus, responded_at: now })
+      .eq("id", row.id)
+      .eq("athlete_id", user.id);
 
-  if (upErr) {
-    console.error("participant-respond:", upErr);
-    return NextResponse.json({ error: "Could not update your response." }, { status: 500 });
+    if (upErr) {
+      console.error("participant-respond update:", upErr);
+      return NextResponse.json({ error: "Could not update your response." }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, status: newStatus });
   }
 
-  return NextResponse.json({ success: true, status: updates.status });
+  // No row yet — athlete is on the team but was not in partnership_participants
+  // (joined after the deal was proposed). Verify team membership then insert.
+  const service = createServiceClient();
+
+  const { data: deal } = await service
+    .from("partnerships")
+    .select("team_id")
+    .eq("id", partnershipId)
+    .maybeSingle();
+
+  if (!deal?.team_id) {
+    return NextResponse.json({ error: "You are not on the roster for this deal." }, { status: 404 });
+  }
+
+  const { data: userProfile } = await service
+    .from("profiles")
+    .select("email")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const userEmail = userProfile?.email?.toLowerCase();
+  if (!userEmail) {
+    return NextResponse.json({ error: "Could not verify your identity." }, { status: 500 });
+  }
+
+  const { data: invite } = await service
+    .from("team_athlete_invitations")
+    .select("id")
+    .eq("team_id", deal.team_id)
+    .eq("email", userEmail)
+    .not("accepted_at", "is", null)
+    .maybeSingle();
+
+  if (!invite) {
+    return NextResponse.json({ error: "You are not on the roster for this deal." }, { status: 404 });
+  }
+
+  const { error: insErr } = await service
+    .from("partnership_participants")
+    .insert({
+      partnership_id: partnershipId,
+      athlete_id: user.id,
+      status: newStatus,
+      responded_at: now,
+    });
+
+  if (insErr) {
+    console.error("participant-respond insert:", insErr);
+    return NextResponse.json({ error: "Could not save your response." }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, status: newStatus });
 }

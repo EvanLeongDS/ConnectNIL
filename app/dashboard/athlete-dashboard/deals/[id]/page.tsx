@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import AthleteDealOptIn from "@/components/deals/AthleteDealOptIn";
 import DeliverableProofView from "@/components/deals/DeliverableProofView";
@@ -50,7 +50,14 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
     .maybeSingle();
   if (!profile) redirect("/onboarding/athlete");
 
-  const { data: deal } = await supabase.from("partnerships").select("*").eq("id", id).maybeSingle();
+  // Use service client so RLS doesn't block team deals where the athlete
+  // isn't yet in partnership_participants (the "not-added" case).
+  const service = createServiceClient();
+  const { data: deal } = await service
+    .from("partnerships")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
   if (!deal) notFound();
 
   const d = deal as DealRow;
@@ -63,9 +70,26 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
     .eq("athlete_id", user.id)
     .maybeSingle();
 
-  if (!isDirectAthlete && !participation) notFound();
+  // For team deals, also check membership via team_athlete_invitations
+  // (covers athletes who joined after the deal was proposed)
+  let isOnTeam = false;
+  if (!isDirectAthlete && !participation && d.team_id) {
+    const userEmail = user.email?.toLowerCase();
+    if (userEmail) {
+      const { data: invite } = await service
+        .from("team_athlete_invitations")
+        .select("id")
+        .eq("team_id", d.team_id)
+        .eq("email", userEmail)
+        .not("accepted_at", "is", null)
+        .maybeSingle();
+      isOnTeam = !!invite;
+    }
+  }
 
-  const { data: deliverableRows } = await supabase
+  if (!isDirectAthlete && !participation && !isOnTeam) notFound();
+
+  const { data: deliverableRows } = await service
     .from("deliverables")
     .select(
       "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at"
@@ -74,7 +98,7 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
     .order("created_at");
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
 
-  const { data: paymentRows } = await supabase
+  const { data: paymentRows } = await service
     .from("deal_payments")
     .select("*")
     .eq("partnership_id", id)
@@ -84,7 +108,10 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
 
   const isActive = d.status === "active";
   const athleteName = `${profile.first_name} ${profile.last_name}`.trim();
-  const showTeamOptIn = Boolean(participation && d.team_id);
+  // Show opt-in for: invited, or on team but not yet in partnership_participants
+  const showTeamOptIn = Boolean(d.team_id && (participation || isOnTeam));
+  const optInStatus: "invited" | "accepted" | "declined" =
+    (participation?.status as "invited" | "accepted" | "declined") ?? "invited";
   const canSubmitDeliverables =
     isActive && (isDirectAthlete || participation?.status === "accepted");
   const proofHref = (deliverableId: string) =>
@@ -143,68 +170,140 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
             </ContractSection>
 
             <ContractSection label="Deliverables">
-              {participation?.status === "invited" && d.team_id && (
+              {(participation?.status === "invited" || isOnTeam) && d.team_id && (
                 <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
                   Accept the partnership below to unlock proof submission for these deliverables.
                 </p>
               )}
-              {deliverables.length > 0 ? (
-                <ol className="space-y-4">
-                  {deliverables.map((del, i) => {
-                    const freq = normalizeFrequency(del.frequency);
-                    const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
-                    return (
-                      <li key={del.id} className="flex gap-3 text-sm">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
-                          {i + 1}
-                        </span>
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[11px] font-bold uppercase tracking-wide text-[#1f7ae0] dark:text-[#8ec5ff]">
-                              {DELIVERABLE_FREQUENCY_LABELS[freq]}
-                            </span>
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusInfo.cls}`}>
-                              {statusInfo.label}
-                            </span>
-                          </div>
-                          <span className="font-semibold text-black dark:text-white">{del.title}</span>
-                          {del.description && (
-                            <p className="mt-0.5 text-black/55 dark:text-white/45">{del.description}</p>
-                          )}
-                          {del.due_date && (
-                            <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
-                              {freq === "one_time" ? "Due " : "Milestone: "}
-                              {formatDate(del.due_date)}
-                            </p>
-                          )}
-                          <DeliverableProofView
-                            description={del.proof_description}
-                            imageUrls={del.proof_image_urls}
-                            className="mt-2"
-                          />
-                          {canSubmitDeliverables && (del.status === "pending" || del.status === "rejected") && (
-                            <div className="mt-2">
-                              <Link
-                                href={proofHref(del.id)}
-                                className="inline-flex rounded-lg bg-[#1f7ae0] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1a6bc9]"
-                              >
-                                {del.status === "rejected" ? "Resubmit proof" : "Submit proof"}
-                              </Link>
-                            </div>
-                          )}
-                          {isActive && del.status === "submitted" && (
-                            <p className="mt-2 text-xs text-black/40 dark:text-white/35">
-                              Awaiting brand review…
-                            </p>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
-              ) : (
+              {deliverables.length === 0 ? (
                 <p className="text-sm text-black/45 dark:text-white/35">No deliverables listed for this deal.</p>
-              )}
+              ) : (() => {
+                const notStarted      = deliverables.filter((del) => del.status === "pending" || del.status === "rejected");
+                const pendingApproval = deliverables.filter((del) => del.status === "submitted");
+                const approved        = deliverables.filter((del) => del.status === "approved");
+
+                function DeliverableItem({ del, index }: { del: typeof deliverables[0]; index: number }) {
+                  const freq = normalizeFrequency(del.frequency);
+                  const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
+                  return (
+                    <li className="flex gap-3 text-sm">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
+                        {index + 1}
+                      </span>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wide text-[#1f7ae0] dark:text-[#8ec5ff]">
+                            {DELIVERABLE_FREQUENCY_LABELS[freq]}
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusInfo.cls}`}>
+                            {statusInfo.label}
+                          </span>
+                        </div>
+                        <span className="font-semibold text-black dark:text-white">{del.title}</span>
+                        {del.description && (
+                          <p className="mt-0.5 text-black/55 dark:text-white/45">{del.description}</p>
+                        )}
+                        {del.due_date && (
+                          <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
+                            {freq === "one_time" ? "Due " : "Milestone: "}
+                            {formatDate(del.due_date)}
+                          </p>
+                        )}
+                        <DeliverableProofView
+                          description={del.proof_description}
+                          imageUrls={del.proof_image_urls}
+                          className="mt-2"
+                        />
+                        {canSubmitDeliverables && (del.status === "pending" || del.status === "rejected") && (
+                          <div className="mt-2">
+                            <Link
+                              href={proofHref(del.id)}
+                              className={`inline-flex rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${
+                                del.status === "rejected"
+                                  ? "bg-red-500 hover:bg-red-600"
+                                  : "bg-[#1f7ae0] hover:bg-[#1a6bc9]"
+                              }`}
+                            >
+                              {del.status === "rejected" ? "Resubmit proof" : "Submit proof"}
+                            </Link>
+                          </div>
+                        )}
+                        {isActive && del.status === "submitted" && (
+                          <p className="mt-2 text-xs text-black/40 dark:text-white/35">
+                            Awaiting brand review…
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                }
+
+                return (
+                  <div className="space-y-6">
+                    {/* Not started */}
+                    <div>
+                      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                        Not started
+                      </p>
+                      {notStarted.length === 0 ? (
+                        <p className="text-xs text-black/30 dark:text-white/25 italic">None</p>
+                      ) : (
+                        <ol className="space-y-4">
+                          {notStarted.map((del, i) => (
+                            <DeliverableItem key={del.id} del={del} index={i} />
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+
+                    {/* Pending approval */}
+                    <div>
+                      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                        Pending approval
+                      </p>
+                      {pendingApproval.length === 0 ? (
+                        <p className="text-xs text-black/30 dark:text-white/25 italic">None</p>
+                      ) : (
+                        <ol className="space-y-4">
+                          {pendingApproval.map((del, i) => (
+                            <DeliverableItem key={del.id} del={del} index={i} />
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+
+                    {/* Approved — always rendered, collapsed by default */}
+                    <details className="group">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-black/35 hover:text-black/55 dark:text-white/30 dark:hover:text-white/50">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="transition-transform group-open:rotate-90"
+                        >
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                        Approved ({approved.length})
+                      </summary>
+                      {approved.length === 0 ? (
+                        <p className="mt-3 pl-4 text-xs text-black/30 dark:text-white/25 italic">None yet</p>
+                      ) : (
+                        <ol className="mt-4 space-y-4 border-l-2 border-emerald-200 pl-4 dark:border-emerald-800/40">
+                          {approved.map((del, i) => (
+                            <DeliverableItem key={del.id} del={del} index={i} />
+                          ))}
+                        </ol>
+                      )}
+                    </details>
+                  </div>
+                );
+              })()}
             </ContractSection>
 
             {(d.brand_signer_name || d.team_signer_name || d.brand_signed_at || d.team_signed_at) && (
@@ -234,9 +333,66 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
           </div>
         </div>
 
-        {showTeamOptIn && participation && (
+        {showTeamOptIn && (
           <div className="mt-8">
-            <AthleteDealOptIn dealId={id} status={participation.status as "invited" | "accepted" | "declined"} />
+            <AthleteDealOptIn dealId={id} status={optInStatus} />
+          </div>
+        )}
+
+        {deliverables.length > 0 && (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
+            <div className="border-b border-black/6 bg-black/2 px-8 py-5 dark:border-white/6 dark:bg-white/3">
+              <p className="text-xs font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                Deliverables
+              </p>
+              {!canSubmitDeliverables && showTeamOptIn && (
+                <p className="mt-1 text-sm text-black/45 dark:text-white/35">
+                  Accept the partnership above to unlock proof submission.
+                </p>
+              )}
+            </div>
+            <div className="divide-y divide-black/5 dark:divide-white/5">
+              {deliverables.map((del, i) => {
+                const freq = normalizeFrequency(del.frequency);
+                const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
+                return (
+                  <div key={del.id} className="flex items-start gap-4 px-8 py-5">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
+                      {i + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-black dark:text-white">{del.title}</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusInfo.cls}`}>
+                          {statusInfo.label}
+                        </span>
+                      </div>
+                      {del.description && (
+                        <p className="mt-0.5 text-sm text-black/55 dark:text-white/45">{del.description}</p>
+                      )}
+                      <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
+                        {DELIVERABLE_FREQUENCY_LABELS[freq]}
+                        {del.due_date ? ` · Due ${formatDate(del.due_date)}` : ""}
+                      </p>
+                      <div className="mt-3">
+                        {canSubmitDeliverables && (del.status === "pending" || del.status === "rejected") ? (
+                          <Link
+                            href={proofHref(del.id)}
+                            className="inline-flex rounded-lg bg-[#1f7ae0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1a6bc9]"
+                          >
+                            {del.status === "rejected" ? "Resubmit proof" : "Submit proof"}
+                          </Link>
+                        ) : del.status === "submitted" ? (
+                          <p className="text-xs text-black/40 dark:text-white/35">Awaiting brand review…</p>
+                        ) : del.status === "approved" ? (
+                          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Approved</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

@@ -31,17 +31,17 @@ export async function POST(request: NextRequest) {
 
   const emailNorm = user.email.toLowerCase();
 
-  const { data: inv, error: invErr } = await service
+  const { data: fullInv, error: fullInvErr } = await service
     .from("team_athlete_invitations")
-    .select("id, email")
+    .select("id, email, team_id")
     .eq("token", token)
     .maybeSingle();
 
-  if (invErr || !inv) {
+  if (fullInvErr || !fullInv) {
     return NextResponse.json({ error: "Invalid invite" }, { status: 404 });
   }
 
-  if (inv.email.toLowerCase() !== emailNorm) {
+  if (fullInv.email.toLowerCase() !== emailNorm) {
     return NextResponse.json({ error: "Email does not match invite" }, { status: 403 });
   }
 
@@ -55,5 +55,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  // Attach the inviting team's name to the athlete's profile
+  const { data: teamProfile } = await service
+    .from("team_profiles")
+    .select("team_name")
+    .eq("id", fullInv.team_id)
+    .maybeSingle();
+
+  if (teamProfile?.team_name) {
+    await service
+      .from("athlete_profiles")
+      .update({ team: teamProfile.team_name, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
+  }
+
+  return NextResponse.json({ success: true, team_name: teamProfile?.team_name ?? null });
 }

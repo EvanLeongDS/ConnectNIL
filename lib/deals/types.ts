@@ -1,7 +1,7 @@
 export type DealStatus = "draft" | "pending" | "active" | "completed" | "cancelled";
 export type PaymentType = "one_time" | "monthly" | "per_deliverable";
 export type DealCategory = "social_media" | "events" | "content_creation" | "mixed";
-export type DeliverableStatus = "pending" | "submitted" | "approved" | "rejected";
+export type DeliverableStatus = "not_started" | "pending" | "submitted" | "approved" | "rejected";
 export type DealPaymentStatus = "pending" | "processing" | "paid" | "failed";
 export type DealOverallPaymentStatus = "unpaid" | "partial" | "paid";
 

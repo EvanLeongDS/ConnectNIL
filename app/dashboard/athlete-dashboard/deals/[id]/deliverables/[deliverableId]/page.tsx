@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import DeliverableProofForm from "@/components/deals/DeliverableProofForm";
 import type { DealRow } from "@/lib/deals/types";
@@ -25,7 +25,13 @@ export default async function AthleteDeliverableProofPage({ params }: Props) {
     .maybeSingle();
   if (!profile) redirect("/onboarding/athlete");
 
-  const { data: deal } = await supabase.from("partnerships").select("*").eq("id", dealId).maybeSingle();
+  // Service client bypasses RLS — deal may only be accessible via team roster
+  const service = createServiceClient();
+  const { data: deal } = await service
+    .from("partnerships")
+    .select("*")
+    .eq("id", dealId)
+    .maybeSingle();
   if (!deal) notFound();
   const d = deal as DealRow;
 
@@ -37,7 +43,23 @@ export default async function AthleteDeliverableProofPage({ params }: Props) {
     .eq("athlete_id", user.id)
     .maybeSingle();
 
-  if (!isDirectAthlete && !participation) notFound();
+  // Check team membership for athletes not yet in partnership_participants
+  let isOnTeam = false;
+  if (!isDirectAthlete && !participation && d.team_id) {
+    const userEmail = user.email?.toLowerCase();
+    if (userEmail) {
+      const { data: invite } = await service
+        .from("team_athlete_invitations")
+        .select("id")
+        .eq("team_id", d.team_id)
+        .eq("email", userEmail)
+        .not("accepted_at", "is", null)
+        .maybeSingle();
+      isOnTeam = !!invite;
+    }
+  }
+
+  if (!isDirectAthlete && !participation && !isOnTeam) notFound();
 
   const canSubmit =
     d.status === "active" &&
@@ -47,9 +69,9 @@ export default async function AthleteDeliverableProofPage({ params }: Props) {
     redirect(`/dashboard/athlete-dashboard/deals/${dealId}`);
   }
 
-  const { data: row } = await supabase
+  const { data: row } = await service
     .from("deliverables")
-    .select("id, title, status, partnership_id")
+    .select("id, title, description, due_date, frequency, status, partnership_id")
     .eq("id", deliverableId)
     .eq("partnership_id", dealId)
     .maybeSingle();
@@ -67,6 +89,7 @@ export default async function AthleteDeliverableProofPage({ params }: Props) {
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
       <DashboardNav role="athlete" name={athleteName} />
       <main className="mx-auto max-w-2xl px-6 py-10 md:px-10">
+        {/* Breadcrumb */}
         <div className="mb-6 flex items-center gap-2 text-sm">
           <Link
             href="/dashboard/athlete-dashboard/deals"
@@ -85,17 +108,37 @@ export default async function AthleteDeliverableProofPage({ params }: Props) {
           <span className="text-black/60 dark:text-white/50">Submit proof</span>
         </div>
 
+        {/* Header */}
         <div className="mb-6 overflow-hidden rounded-2xl border border-black/8 bg-white p-8 shadow-sm dark:border-white/8 dark:bg-[#161b27]">
-          <p className="text-xs font-bold uppercase tracking-widest text-[#1f7ae0]">Proof of deliverable</p>
-          <h1 className="mt-2 text-2xl font-black tracking-tight text-black dark:text-white">
-            Upload images & description
-          </h1>
-          <p className="mt-2 text-sm text-black/50 dark:text-white/40">
-            The brand needs a clear written summary (at least 150 characters) and at least one screenshot or photo
-            showing the work you completed.
+          <p className="text-xs font-bold uppercase tracking-widest text-[#1f7ae0]">
+            Proof of deliverable
           </p>
+          <h1 className="mt-2 text-2xl font-black tracking-tight text-black dark:text-white">
+            {row.title}
+          </h1>
+          {row.description && (
+            <p className="mt-1.5 text-sm leading-relaxed text-black/55 dark:text-white/45">
+              {row.description}
+            </p>
+          )}
+          {row.due_date && (
+            <p className="mt-2 text-xs font-medium text-black/45 dark:text-white/35">
+              Due{" "}
+              {new Date(row.due_date).toLocaleDateString("en-US", {
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </p>
+          )}
+          {row.status === "rejected" && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
+              This deliverable was rejected. Please address the brand&apos;s feedback and resubmit.
+            </div>
+          )}
         </div>
 
+        {/* Form */}
         <div className="rounded-2xl border border-black/8 bg-white p-8 shadow-sm dark:border-white/8 dark:bg-[#161b27]">
           <DeliverableProofForm
             dealId={dealId}

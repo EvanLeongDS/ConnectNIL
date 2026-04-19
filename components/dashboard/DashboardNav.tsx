@@ -20,6 +20,8 @@ const navItems: Record<DashboardNavProps["role"], NavItem[]> = {
     { label: "Overview", href: "/dashboard/athlete-dashboard" },
     { label: "Discover", href: "/dashboard/athlete-dashboard/discover" },
     { label: "Deals", href: "/dashboard/athlete-dashboard/deals" },
+    { label: "Deliverables", href: "/dashboard/athlete-dashboard/deliverables" },
+    { label: "Team", href: "/dashboard/athlete-dashboard/team" },
     { label: "Profile", href: "/dashboard/athlete-dashboard/profile" },
   ],
   "brand-manager": [
@@ -68,7 +70,8 @@ export default function DashboardNav({ role, name }: DashboardNavProps) {
             const active =
               pathname === item.href ||
               (item.href.endsWith("/profile") && pathname.startsWith(`${item.href}/`)) ||
-              (item.href.endsWith("/deals") && pathname.startsWith(`${item.href}/`));
+              (item.href.endsWith("/deals") && pathname.startsWith(`${item.href}/`)) ||
+              (item.href.endsWith("/deliverables") && pathname.startsWith(`${item.href}/`));
             return (
               <Link
                 key={item.href}

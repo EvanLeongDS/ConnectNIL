@@ -92,9 +92,17 @@ export async function updateSession(request: NextRequest) {
 
     // Logged in → don't show auth pages, send to dashboard router
     if (user && isAuthRoute) {
-      const nextUrl = request.nextUrl.clone();
-      nextUrl.pathname = "/dashboard";
-      return NextResponse.redirect(nextUrl);
+      // Team invite links redirect to /signup/athlete?invite=… — athletes who are already signed in
+      // must be allowed through so the page can call /api/invite/mark-accepted (middleware was
+      // stripping the query and they never showed as "Joined" on the roster).
+      const hasTeamInvite =
+        pathname.startsWith("/signup/athlete") &&
+        Boolean(request.nextUrl.searchParams.get("invite")?.trim());
+      if (!hasTeamInvite) {
+        const nextUrl = request.nextUrl.clone();
+        nextUrl.pathname = "/dashboard";
+        return NextResponse.redirect(nextUrl);
+      }
     }
 
     // Logged in — enforce that each dashboard sub-route matches the user's role

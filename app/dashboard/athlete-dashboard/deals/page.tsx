@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 
 import {
@@ -11,7 +11,7 @@ import {
   formatDate,
 } from "@/lib/deals/types";
 
-type ParticipationStatus = "invited" | "accepted" | "declined";
+type ParticipationStatus = "invited" | "accepted" | "declined" | "not-added";
 
 interface Partnership {
   id: string;
@@ -44,71 +44,81 @@ export default async function AthleteDealsPage() {
     .maybeSingle();
   if (!profile) redirect("/onboarding/athlete");
 
-  const [{ data: directRows }, { data: partRows }] = await Promise.all([
-    supabase
-      .from("partnerships")
-      .select(
-        "id, title, deal_type, status, total_value, brand_display_name, team_display_name, season, start_date, end_date, created_at"
-      )
-      .eq("athlete_id", user.id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("partnership_participants")
-      .select("partnership_id, status")
-      .eq("athlete_id", user.id),
-  ]);
+  // Direct deals where athlete_id = user
+  const { data: directRows } = await supabase
+    .from("partnerships")
+    .select(
+      "id, title, deal_type, status, total_value, brand_display_name, team_display_name, season, start_date, end_date, created_at"
+    )
+    .eq("athlete_id", user.id)
+    .order("created_at", { ascending: false });
 
   const direct = (directRows ?? []) as Omit<Partnership, "source" | "participationStatus">[];
   const directIds = new Set(direct.map((d) => d.id));
 
-  const participantLinks = partRows ?? [];
-  const teamIds = participantLinks.map((p) => p.partnership_id).filter((id) => !directIds.has(id));
+  // Team deals: look up by team membership (service client bypasses RLS so deals
+  // show even if partnership_participants wasn't populated at proposal time)
+  const service = createServiceClient();
+  const userEmail = user.email!.toLowerCase();
 
-  let teamDeals: Omit<Partnership, "source" | "participationStatus">[] = [];
-  if (teamIds.length > 0) {
-    const { data: trows } = await supabase
+  const { data: teamInviteRows } = await service
+    .from("team_athlete_invitations")
+    .select("team_id")
+    .eq("email", userEmail)
+    .not("accepted_at", "is", null);
+
+  const myTeamIds = (teamInviteRows ?? []).map((r: { team_id: string }) => r.team_id);
+
+  let rawTeamDeals: Omit<Partnership, "source" | "participationStatus">[] = [];
+  if (myTeamIds.length > 0) {
+    const { data: trows } = await service
       .from("partnerships")
       .select(
         "id, title, deal_type, status, total_value, brand_display_name, team_display_name, season, start_date, end_date, created_at"
       )
-      .in("id", teamIds)
+      .in("team_id", myTeamIds)
+      .in("status", ["pending", "active"])
       .order("created_at", { ascending: false });
-    teamDeals = (trows ?? []) as Omit<Partnership, "source" | "participationStatus">[];
+    rawTeamDeals = (trows ?? []).filter(
+      (r: { id: string }) => !directIds.has(r.id)
+    ) as Omit<Partnership, "source" | "participationStatus">[];
   }
 
+  // Participation status for each team deal
+  const teamDealIds = rawTeamDeals.map((d) => d.id);
+  const { data: partRows } = teamDealIds.length
+    ? await supabase
+        .from("partnership_participants")
+        .select("partnership_id, status")
+        .eq("athlete_id", user.id)
+        .in("partnership_id", teamDealIds)
+    : { data: [] };
+
   const statusByPartnership = new Map<string, ParticipationStatus>();
-  for (const p of participantLinks) {
+  (partRows ?? []).forEach((p: { partnership_id: string; status: string }) => {
     const st = p.status as ParticipationStatus;
-    if (st === "invited" || st === "accepted" || st === "declined") {
-      statusByPartnership.set(p.partnership_id, st);
-    }
-  }
+    statusByPartnership.set(p.partnership_id, st);
+  });
 
   const deals: Partnership[] = [
     ...direct.map((d) => ({ ...d, source: "direct" as const })),
-    ...teamDeals.map((d) => ({
+    ...rawTeamDeals.map((d) => ({
       ...d,
       source: "team" as const,
-      participationStatus: statusByPartnership.get(d.id),
+      // "not-added" means they're on the team but not yet in partnership_participants
+      participationStatus: statusByPartnership.get(d.id) ?? ("not-added" as const),
     })),
-  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  ]
+    .filter((d) => d.status === "active" || d.status === "pending")
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-  const tabs = [
-    { label: "All", filter: () => true },
+  const sections = [
     { label: "Active", filter: (d: Partnership) => d.status === "active" },
     { label: "Pending", filter: (d: Partnership) => d.status === "pending" },
-    { label: "Completed", filter: (d: Partnership) => d.status === "completed" },
   ];
 
   function participationBadge(d: Partnership) {
-    if (d.source !== "team" || !d.participationStatus) return null;
-    if (d.participationStatus === "invited") {
-      return (
-        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-          Opt in needed
-        </span>
-      );
-    }
+    if (d.source !== "team") return null;
     if (d.participationStatus === "accepted") {
       return (
         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
@@ -116,9 +126,17 @@ export default async function AthleteDealsPage() {
         </span>
       );
     }
+    if (d.participationStatus === "declined") {
+      return (
+        <span className="rounded-full bg-black/8 px-2 py-0.5 text-[11px] font-bold text-black/50 dark:bg-white/10 dark:text-white/45">
+          Declined
+        </span>
+      );
+    }
+    // "invited" or "not-added" — action needed
     return (
-      <span className="rounded-full bg-black/8 px-2 py-0.5 text-[11px] font-bold text-black/50 dark:bg-white/10 dark:text-white/45">
-        Declined
+      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+        Opt in needed
       </span>
     );
   }
@@ -136,12 +154,11 @@ export default async function AthleteDealsPage() {
           </p>
         </div>
 
-        <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
           {[
             { label: "Total", value: deals.length },
             { label: "Active", value: deals.filter((d) => d.status === "active").length },
             { label: "Pending", value: deals.filter((d) => d.status === "pending").length },
-            { label: "Completed", value: deals.filter((d) => d.status === "completed").length },
           ].map(({ label, value }) => (
             <div
               key={label}
@@ -153,7 +170,7 @@ export default async function AthleteDealsPage() {
           ))}
         </div>
 
-        {tabs.slice(1).map(({ label, filter }) => {
+        {sections.map(({ label, filter }) => {
           const group = deals.filter(filter);
           if (group.length === 0) return null;
           return (

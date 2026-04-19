@@ -34,6 +34,14 @@ function CheckItem({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+interface TeamInviteInfo {
+  team_name: string;
+  school: string;
+  sport: string;
+  division: string | null;
+  email: string;
+}
+
 function AthleteSignupInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,10 +54,83 @@ function AthleteSignupInner() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // When the athlete is already logged in with the invited email, show a
+  // confirmation screen rather than silently accepting the invite.
+  const [pendingInvite, setPendingInvite] = useState<{
+    teamInfo: TeamInviteInfo;
+    accessToken: string;
+  } | null>(null);
+  const [acceptingInvite, setAcceptingInvite] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
   useEffect(() => {
     const q = searchParams.get("email")?.trim();
     if (q) setEmail(q);
   }, [searchParams]);
+
+  // Check if athlete is already logged in — if so, fetch team info and show confirmation.
+  useEffect(() => {
+    if (!inviteToken) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelled || !session?.access_token || !session.user?.email) return;
+      const invitedEmail = (searchParams.get("email")?.trim() || "").toLowerCase();
+      if (!invitedEmail || session.user.email.toLowerCase() !== invitedEmail) return;
+      if (session.user.user_metadata?.role !== "athlete") return;
+
+      // Fetch team info to show the confirmation screen
+      try {
+        const res = await fetch(`/api/invite/info?token=${encodeURIComponent(inviteToken)}`);
+        if (!cancelled && res.ok) {
+          const teamInfo: TeamInviteInfo = await res.json();
+          setPendingInvite({ teamInfo, accessToken: session.access_token });
+        }
+      } catch {
+        // Fall through — athlete can use the form normally
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteToken, searchParams]);
+
+  async function handleAcceptInvite() {
+    if (!pendingInvite) return;
+    setAcceptingInvite(true);
+    setInviteError(null);
+    try {
+      const res = await fetch("/api/invite/mark-accepted", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${pendingInvite.accessToken}`,
+        },
+        body: JSON.stringify({ token: inviteToken }),
+      });
+      if (res.ok) {
+        router.replace("/dashboard/athlete-dashboard");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setInviteError((body as { error?: string }).error ?? "Failed to accept invite. Please try again.");
+        setAcceptingInvite(false);
+      }
+    } catch {
+      setInviteError("Network error. Please try again.");
+      setAcceptingInvite(false);
+    }
+  }
+
+  async function handleSignOutAndReLogin() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    const dest = new URL("/login", window.location.origin);
+    dest.searchParams.set("redirect", window.location.pathname + window.location.search);
+    router.replace(dest.toString());
+  }
 
   const checks = useMemo(() => getPasswordChecks(password), [password]);
   const passwordValid = checks.length && checks.number && checks.special;
@@ -104,6 +185,58 @@ function AthleteSignupInner() {
     if (!navigateAfterSignUp(data.session, router)) {
       setSuccess(true);
     }
+  }
+
+  if (pendingInvite) {
+    const { teamInfo } = pendingInvite;
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-white px-8 dark:bg-[#0d1117]">
+        <AuthNav />
+        <div className="w-full max-w-sm space-y-6">
+          <div className="text-center">
+            <div className="mb-3 text-4xl">🏆</div>
+            <h1 className="text-2xl font-bold text-black dark:text-white">Team Invite</h1>
+            <p className="mt-1 text-sm text-black/50 dark:text-white/40">
+              You have been invited to join a team roster
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-black/10 bg-[#f9fafb] p-5 dark:border-white/10 dark:bg-white/5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">{teamInfo.sport}</p>
+            <p className="mt-1 text-xl font-black text-black dark:text-white">{teamInfo.team_name}</p>
+            <p className="mt-0.5 text-sm text-black/50 dark:text-white/40">
+              {teamInfo.school}
+              {teamInfo.division ? ` · ${teamInfo.division}` : ""}
+            </p>
+            <p className="mt-3 text-xs text-black/45 dark:text-white/35">
+              Invite sent to <strong className="text-black dark:text-white">{teamInfo.email}</strong>
+            </p>
+          </div>
+
+          {inviteError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">{inviteError}</div>
+          )}
+
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleAcceptInvite}
+              disabled={acceptingInvite}
+              className="w-full rounded-full bg-[#1f7ae0] py-3 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
+            >
+              {acceptingInvite ? "Accepting…" : "Accept & Go to Dashboard"}
+            </button>
+            <button
+              type="button"
+              onClick={handleSignOutAndReLogin}
+              className="w-full rounded-full border border-black/15 py-3 text-sm font-semibold text-black/60 transition hover:border-black/30 hover:text-black dark:border-white/15 dark:text-white/50 dark:hover:border-white/30 dark:hover:text-white"
+            >
+              Not you? Sign in with a different account
+            </button>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   if (success) {

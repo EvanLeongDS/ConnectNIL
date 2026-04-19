@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import ReCAPTCHA from "react-google-recaptcha";
 import ThemeToggle from "@/components/ThemeToggle";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -20,6 +21,18 @@ export default function ContactPage() {
   const [errors, setErrors] = useState<Partial<typeof form>>({});
   const [status, setStatus] = useState<Status>("idle");
   const [serverError, setServerError] = useState("");
+  const [captchaError, setCaptchaError] = useState("");
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+  const [isDark, setIsDark] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains("dark"));
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    });
+    observer.observe(document.documentElement, { attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
 
   function validate() {
     const e: Partial<typeof form> = {};
@@ -37,6 +50,13 @@ export default function ContactPage() {
     e.preventDefault();
     if (!validate()) return;
 
+    const captchaToken = recaptchaRef.current?.getValue();
+    if (!captchaToken) {
+      setCaptchaError("Please complete the CAPTCHA.");
+      return;
+    }
+    setCaptchaError("");
+
     setStatus("loading");
     setServerError("");
 
@@ -44,16 +64,18 @@ export default function ContactPage() {
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, captchaToken }),
       });
       const data = await res.json();
 
       if (!res.ok) {
         setServerError(data.error ?? "Something went wrong. Please try again.");
         setStatus("error");
+        recaptchaRef.current?.reset();
       } else {
         setStatus("success");
         setForm({ name: "", email: "", subject: "", message: "" });
+        recaptchaRef.current?.reset();
       }
     } catch {
       setServerError("Network error. Please check your connection.");
@@ -191,6 +213,32 @@ export default function ContactPage() {
                   {form.message.length} chars
                 </p>
               </Field>
+            </div>
+
+            <div className="contact-recaptcha mt-6 rounded-xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-[#161b27]">
+              <div className="recaptcha-fringe-mask">
+                {isDark !== null && (
+                  <ReCAPTCHA
+                    key={isDark ? "dark" : "light"}
+                    ref={recaptchaRef}
+                    sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
+                    theme={isDark ? "dark" : "light"}
+                    onChange={() => setCaptchaError("")}
+                  />
+                )}
+                <div
+                  className="pointer-events-none absolute inset-0 z-[3] hidden rounded-[0.375rem] dark:block"
+                  aria-hidden
+                >
+                  <div className="absolute inset-x-0 top-0 h-3 bg-[#161b27]" />
+                  <div className="absolute inset-x-0 bottom-0 h-3 bg-[#161b27]" />
+                  <div className="absolute inset-y-0 right-0 w-4 bg-[#161b27]" />
+                  <div className="absolute inset-y-0 left-0 w-1.5 bg-[#161b27]" />
+                </div>
+              </div>
+              {captchaError && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">{captchaError}</p>
+              )}
             </div>
 
             {/* Submit */}

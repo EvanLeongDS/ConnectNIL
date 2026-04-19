@@ -1,0 +1,10 @@
+{"sessionId":"c9367f","runId":"pre-fix","hypothesisId":"H1","location":"app/contact/page.tsx:mount-env","message":"NEXT_PUBLIC_RECAPTCHA_SITE_KEY presence","data":{"hasSiteKey":true,"siteKeyLen":40},"timestamp":1776638623425}
+{"sessionId":"c9367f","runId":"pre-fix","hypothesisId":"H2","location":"app/contact/page.tsx:isDark","message":"isDark gate for ReCAPTCHA render","data":{"isDark":null,"gateOpen":false},"timestamp":1776638623426}
+{"sessionId":"c9367f","runId":"pre-fix","hypothesisId":"H2","location":"app/contact/page.tsx:isDark","message":"isDark gate for ReCAPTCHA render","data":{"isDark":true,"gateOpen":true},"timestamp":1776638623436}
+{"sessionId":"c9367f","runId":"pre-fix","hypothesisId":"H4","location":"app/contact/page.tsx:grecaptcha-delay","message":"grecaptcha global after delay","data":{"grecaptchaDefined":true},"timestamp":1776638625930}
+{"sessionId":"c9367f","runId":"pre-fix","hypothesisId":"H2","location":"app/contact/page.tsx:isDark","message":"isDark gate for ReCAPTCHA render","data":{"isDark":null,"gateOpen":false},"timestamp":1776638665375}
+{"sessionId":"c9367f","runId":"pre-fix","hypothesisId":"H1","location":"app/contact/page.tsx:mount-env","message":"NEXT_PUBLIC_RECAPTCHA_SITE_KEY presence","data":{"hasSiteKey":true,"siteKeyLen":40},"timestamp":1776638665374}
+{"sessionId":"c9367f","runId":"pre-fix","hypothesisId":"H2","location":"app/contact/page.tsx:isDark","message":"isDark gate for ReCAPTCHA render","data":{"isDark":true,"gateOpen":true},"timestamp":1776638665413}
+{"sessionId":"c9367f","runId":"pre-fix","hypothesisId":"H4","location":"app/contact/page.tsx:grecaptcha-delay","message":"grecaptcha global after delay","data":{"grecaptchaDefined":true},"timestamp":1776638667876}
+{"sessionId":"c9367f","runId":"recaptcha-css-v2","hypothesisId":"H3","location":"contact/page.tsx:dom-probe","message":"g-recaptcha mount","data":{"found":false},"timestamp":1776638858096}
+{"sessionId":"c9367f","runId":"recaptcha-css-v2","hypothesisId":"H3","location":"contact/page.tsx:dom-probe","message":"g-recaptcha mount","data":{"found":false},"timestamp":1776638885375}

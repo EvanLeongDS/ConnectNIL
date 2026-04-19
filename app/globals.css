@@ -97,3 +97,32 @@
     @apply font-sans;
   }
 }
+
+/*
+ * reCAPTCHA v2 dark: white fringe is drawn inside Google’s iframe (cross-origin — no selector can style it).
+ * Strategy: overflow mask + slight scale-up + JSX edge strips (#161b27, pointer-events:none) painted above the iframe.
+ */
+html.dark .contact-recaptcha .recaptcha-fringe-mask {
+  position: relative;
+  isolation: isolate;
+  width: min(304px, 100%);
+  height: 78px;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  background-color: #161b27;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+html.dark .contact-recaptcha .recaptcha-fringe-mask .g-recaptcha {
+  position: relative;
+  z-index: 0;
+  transform: scale(1.042);
+  transform-origin: center center;
+}
+
+html.dark .contact-recaptcha .recaptcha-fringe-mask .g-recaptcha iframe {
+  display: block !important;
+  border: 0 !important;
+}

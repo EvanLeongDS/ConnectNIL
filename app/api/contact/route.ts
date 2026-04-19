@@ -9,15 +9,36 @@ function getResend(): Resend | null {
   return key ? new Resend(key) : null;
 }
 
+async function verifyCaptcha(token: string): Promise<boolean> {
+  const secret = process.env.RECAPTCHA_SECRET_KEY?.trim();
+  if (!secret) {
+    console.warn("RECAPTCHA_SECRET_KEY not set; skipping captcha verification.");
+    return true;
+  }
+  const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ secret, response: token }),
+  });
+  const data = await res.json() as { success: boolean };
+  return data.success;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, subject, message } = body as {
+    const { name, email, subject, message, captchaToken } = body as {
       name: string;
       email: string;
       subject: string;
       message: string;
+      captchaToken: string;
     };
+
+    // Verify reCAPTCHA
+    if (!captchaToken || !(await verifyCaptcha(captchaToken))) {
+      return NextResponse.json({ error: "CAPTCHA verification failed. Please try again." }, { status: 400 });
+    }
 
     // Basic server-side validation
     if (!name?.trim() || !email?.trim() || !subject?.trim() || !message?.trim()) {

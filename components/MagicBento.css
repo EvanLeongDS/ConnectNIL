@@ -1,12 +1,21 @@
 :root {
   --hue: 27;
   --sat: 69%;
-  --white: hsl(0, 0%, 100%);
   /* Default glow color (RGB) is set via inline style: --glow-color: "r, g, b" */
   --glow-color: 31, 122, 224;
-  --border-color: #392e4e;
-  --background-dark: #060010;
-  color-scheme: light dark;
+
+  /* Theme-aware tokens (light defaults). */
+  --bento-bg: #ffffff;
+  --bento-text: #0b1220;
+  --bento-border: rgba(2, 6, 23, 0.10);
+  color-scheme: light;
+}
+
+html.dark {
+  --bento-bg: #060010;
+  --bento-text: hsl(0, 0%, 100%);
+  --bento-border: #392e4e;
+  color-scheme: dark;
 }
 
 .card-grid {
@@ -32,8 +41,8 @@
   max-width: 100%;
   padding: 1.25em;
   border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background: var(--background-dark);
+  border: 1px solid var(--bento-border);
+  background: var(--bento-bg);
   font-weight: 300;
   overflow: hidden;
   transition: all 0.3s ease;
@@ -64,7 +73,7 @@
 .magic-bento-card__content {
   display: flex;
   position: relative;
-  color: var(--white);
+  color: var(--bento-text);
 }
 
 .magic-bento-card__header {

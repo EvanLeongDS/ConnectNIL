@@ -99,9 +99,15 @@
 }
 
 /*
- * reCAPTCHA v2 dark: white fringe is drawn inside Google’s iframe (cross-origin — no selector can style it).
- * Strategy: overflow mask + slight scale-up + JSX edge strips (#161b27, pointer-events:none) painted above the iframe.
+ * reCAPTCHA v2 dark: white fringe is drawn inside Google's iframe (cross-origin).
+ * Light mode: no mask — let the widget render naturally on white.
+ * Dark mode: overflow mask + scale + JSX edge strips hide the inner halo.
  */
+html:not(.dark) .contact-recaptcha .recaptcha-fringe-mask {
+  all: unset;
+  display: block;
+}
+
 html.dark .contact-recaptcha .recaptcha-fringe-mask {
   position: relative;
   isolation: isolate;

@@ -335,5 +335,27 @@ alter table public.contact_messages enable row level security;
 create policy "Anyone can submit a contact message" on public.contact_messages for insert with check (true);
 create policy "Service role can read messages"      on public.contact_messages for select using (false);
 
+-- ─── Storage bucket: Deliverable proof images ────────────────────────────────
+-- This is required by `app/api/deals/[id]/deliverables/[deliverableId]/submit`.
+-- Uploads are performed with the Supabase service role; the bucket must exist.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'deliverable-proofs',
+  'deliverable-proofs',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+-- Anyone can read proof images (URLs are unguessable paths)
+drop policy if exists "Public read deliverable proofs" on storage.objects;
+create policy "Public read deliverable proofs"
+  on storage.objects for select
+  using (bucket_id = 'deliverable-proofs');
+
 -- ─── Reload schema cache ────────────────────────────────────────────────────
 NOTIFY pgrst, 'reload schema';

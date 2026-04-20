@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
+import ThemeDebugProbe from "@/components/ThemeDebugProbe";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -21,11 +22,12 @@ export default function RootLayout({
         {/* Prevent flash of wrong theme on load */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark')}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');if(!t){localStorage.setItem('theme','light');}}}catch(e){}})()`,
           }}
         />
       </head>
       <body className="min-h-screen bg-white text-black antialiased dark:bg-[#0d1117] dark:text-white">
+        <ThemeDebugProbe label="RootLayout" />
         {children}
       </body>
     </html>

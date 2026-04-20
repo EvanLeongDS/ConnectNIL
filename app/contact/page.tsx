@@ -2,8 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import ReCAPTCHA from "react-google-recaptcha";
 import ThemeToggle from "@/components/ThemeToggle";
+
+declare global {
+  interface Window {
+    grecaptcha: {
+      ready: (cb: () => void) => void;
+      render: (container: HTMLElement, params: {
+        sitekey: string;
+        theme?: "light" | "dark";
+        callback?: (token: string) => void;
+        "expired-callback"?: () => void;
+      }) => number;
+      reset: (widgetId: number) => void;
+    };
+  }
+}
 
 type Status = "idle" | "loading" | "success" | "error";
 
@@ -22,8 +36,11 @@ export default function ContactPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [serverError, setServerError] = useState("");
   const [captchaError, setCaptchaError] = useState("");
-  const recaptchaRef = useRef<ReCAPTCHA>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isDark, setIsDark] = useState<boolean | null>(null);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const widgetIdRef = useRef<number | null>(null);
+  const captchaContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains("dark"));
@@ -33,6 +50,47 @@ export default function ContactPage() {
     observer.observe(document.documentElement, { attributeFilter: ["class"] });
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (document.querySelector('script[data-recaptcha]')) {
+      if (window.grecaptcha) setScriptLoaded(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://www.google.com/recaptcha/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.dataset.recaptcha = "1";
+    script.onload = () => setScriptLoaded(true);
+    document.head.appendChild(script);
+  }, []);
+
+  useEffect(() => {
+    if (!scriptLoaded || isDark === null || !captchaContainerRef.current) return;
+    const sitekey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    if (!sitekey) return;
+    const container = captchaContainerRef.current;
+    window.grecaptcha.ready(() => {
+      if (widgetIdRef.current !== null) {
+        try { window.grecaptcha.reset(widgetIdRef.current); } catch {}
+      }
+      container.innerHTML = "";
+      widgetIdRef.current = window.grecaptcha.render(container, {
+        sitekey,
+        theme: isDark ? "dark" : "light",
+        callback: (token) => { setCaptchaToken(token); setCaptchaError(""); },
+        "expired-callback": () => setCaptchaToken(null),
+      });
+      setCaptchaToken(null);
+    });
+  }, [scriptLoaded, isDark]);
+
+  function resetCaptcha() {
+    if (widgetIdRef.current !== null) {
+      try { window.grecaptcha.reset(widgetIdRef.current); } catch {}
+    }
+    setCaptchaToken(null);
+  }
 
   function validate() {
     const e: Partial<typeof form> = {};
@@ -50,13 +108,11 @@ export default function ContactPage() {
     e.preventDefault();
     if (!validate()) return;
 
-    const captchaToken = recaptchaRef.current?.getValue();
     if (!captchaToken) {
       setCaptchaError("Please complete the CAPTCHA.");
       return;
     }
     setCaptchaError("");
-
     setStatus("loading");
     setServerError("");
 
@@ -71,11 +127,11 @@ export default function ContactPage() {
       if (!res.ok) {
         setServerError(data.error ?? "Something went wrong. Please try again.");
         setStatus("error");
-        recaptchaRef.current?.reset();
+        resetCaptcha();
       } else {
         setStatus("success");
         setForm({ name: "", email: "", subject: "", message: "" });
-        recaptchaRef.current?.reset();
+        resetCaptcha();
       }
     } catch {
       setServerError("Network error. Please check your connection.");
@@ -146,7 +202,7 @@ export default function ContactPage() {
           <form
             onSubmit={handleSubmit}
             noValidate
-            className="rounded-2xl border border-black/8 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-[#161b27]"
+            className="rounded-2xl border border-black/10 bg-white p-8 shadow-md dark:border-white/10 dark:bg-[#161b27]"
           >
             {serverError && (
               <div className="mb-6 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/30 dark:bg-red-900/15 dark:text-red-400">
@@ -215,17 +271,10 @@ export default function ContactPage() {
               </Field>
             </div>
 
-            <div className="contact-recaptcha mt-6 rounded-xl border border-black/10 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-[#161b27]">
+            {/* reCAPTCHA */}
+            <div className="contact-recaptcha mt-6 dark:rounded-xl dark:border dark:border-white/10 dark:bg-[#161b27] dark:p-3">
               <div className="recaptcha-fringe-mask">
-                {isDark !== null && (
-                  <ReCAPTCHA
-                    key={isDark ? "dark" : "light"}
-                    ref={recaptchaRef}
-                    sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY!}
-                    theme={isDark ? "dark" : "light"}
-                    onChange={() => setCaptchaError("")}
-                  />
-                )}
+                <div ref={captchaContainerRef} />
                 <div
                   className="pointer-events-none absolute inset-0 z-[3] hidden rounded-[0.375rem] dark:block"
                   aria-hidden
@@ -259,7 +308,7 @@ export default function ContactPage() {
             { icon: "🔒", label: "Private",      desc: "Your info stays with us" },
             { icon: "🤝", label: "Partnerships", desc: "Open to all collaboration" },
           ].map(({ icon, label, desc }) => (
-            <div key={label} className="rounded-2xl border border-black/6 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#161b27]">
+            <div key={label} className="rounded-2xl border border-black/10 bg-white p-5 text-center shadow-md dark:border-white/10 dark:bg-[#161b27]">
               <div className="mb-2 text-2xl">{icon}</div>
               <p className="text-sm font-semibold text-black dark:text-white">{label}</p>
               <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">{desc}</p>
@@ -276,7 +325,7 @@ export default function ContactPage() {
 function inputClass(hasError: boolean) {
   return [
     "w-full rounded-xl border px-4 py-3 text-sm outline-none transition",
-    "bg-white text-black placeholder-black/30",
+    "bg-gray-50 text-black placeholder-black/30",
     "dark:bg-[#1c2333] dark:text-white dark:placeholder-white/30",
     hasError
       ? "border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200 dark:border-red-500 dark:focus:ring-red-900/40"

@@ -98,6 +98,13 @@
   }
 }
 
+@keyframes nil-word-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /*
  * reCAPTCHA v2 dark: white fringe is drawn inside Google's iframe (cross-origin).
  * Light mode: no mask — let the widget render naturally on white.

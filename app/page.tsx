@@ -4,6 +4,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import Particles from "@/components/Particles";
 import SpotlightCard from "@/components/SpotlightCard";
 import LandingFaq from "@/components/landing/LandingFaq";
+import TextAnimate from "@/components/landing/TextAnimate";
 
 export default async function ConnectNILLandingPage() {
   const supabase = await createClient();
@@ -86,13 +87,21 @@ export default async function ConnectNILLandingPage() {
       {/* ── Hero ── */}
       <main className="mx-auto flex min-h-[calc(100vh-73px)] max-w-7xl items-center px-6 py-20 md:px-10 md:py-28">
         <section className="w-full max-w-5xl">
-          <h1 className="max-w-5xl text-6xl font-black leading-[0.95] tracking-tight text-black dark:text-white sm:text-7xl md:text-8xl">
-            Creating NIL deals for those who want it.
-          </h1>
+          <TextAnimate
+            as="h1"
+            text="Creating NIL deals for those who want it."
+            delay={100}
+            stagger={55}
+            className="max-w-5xl text-6xl font-black leading-[0.95] tracking-tight text-black dark:text-white sm:text-7xl md:text-8xl"
+          />
 
-          <p className="mt-8 max-w-4xl text-2xl leading-relaxed text-black/50 dark:text-white/55 md:text-3xl">
-            The platform that connects teams and brands around the world.
-          </p>
+          <TextAnimate
+            as="p"
+            text="The platform that connects teams and brands around the world."
+            delay={600}
+            stagger={45}
+            className="mt-8 max-w-4xl text-2xl leading-relaxed text-black/50 dark:text-white/55 md:text-3xl"
+          />
 
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <Link href="/role" className="rounded-full bg-[#1f7ae0] px-7 py-3.5 text-base font-semibold text-white shadow-md transition hover:scale-[1.02]">

@@ -706,7 +706,7 @@ export default function SportsBalls({ className = "" }: { className?: string }) 
     // Last value written per seat, so the expensive properties are only touched
     // when they actually change.
     const lastAmp = seats.map(() => -1);
-    const lastFilter = seats.map(() => " ");
+    const lastFilter = seats.map(() => "");
     let lastLinks = -1;
 
     const live: Slot[] = BALLS.map(() => ({ x: 0, y: 0, size: 0 }));

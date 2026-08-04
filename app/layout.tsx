@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
-import ThemeDebugProbe from "@/components/ThemeDebugProbe";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -27,7 +26,6 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-white text-black antialiased dark:bg-[#0d1117] dark:text-white">
-        <ThemeDebugProbe label="RootLayout" />
         {children}
       </body>
     </html>

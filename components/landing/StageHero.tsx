@@ -226,10 +226,7 @@ export default function StageHero() {
                   </>
                 ) : (
                   <>
-                    <p className="stage-panel-title text-sm font-black tracking-widest text-[#1f7ae0] dark:text-[#93c5fd]">
-                      {`0${i}`}
-                    </p>
-                    <h2 className="stage-panel-title mt-3 max-w-3xl text-5xl font-black leading-[1] tracking-tight text-black dark:text-white md:text-6xl">
+                    <h2 className="stage-panel-title max-w-3xl text-5xl font-black leading-[1] tracking-tight text-black dark:text-white md:text-6xl">
                       {item.title}
                     </h2>
                     <p className="stage-panel-body mt-6 max-w-2xl text-xl font-medium leading-relaxed text-black/70 dark:text-white/85 md:text-2xl">

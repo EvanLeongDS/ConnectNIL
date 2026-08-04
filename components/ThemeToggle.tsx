@@ -2,27 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-function postDebug(message: string, data: Record<string, unknown>, hypothesisId: string, runId: string) {
-  // #region agent log
-  fetch("http://127.0.0.1:7364/ingest/e4562ef6-100d-491e-9aae-be85661ee21a", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "742ebd",
-    },
-    body: JSON.stringify({
-      sessionId: "742ebd",
-      runId,
-      hypothesisId,
-      location: "components/ThemeToggle.tsx:18",
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
-
 export default function ThemeToggle() {
   const [dark, setDark] = useState<boolean | null>(null);
 
@@ -33,17 +12,6 @@ export default function ThemeToggle() {
     document.documentElement.classList.toggle("dark", isDark);
     setDark(isDark);
     if (!pref) localStorage.setItem("theme", "light");
-
-    postDebug(
-      "ThemeToggle mount sync",
-      {
-        pref,
-        html_class: document.documentElement.className,
-        html_has_dark: document.documentElement.classList.contains("dark"),
-      },
-      "H2",
-      "pre-fix"
-    );
   }, []);
 
   function toggle() {
@@ -56,18 +24,6 @@ export default function ThemeToggle() {
       document.documentElement.classList.remove("dark");
       localStorage.setItem("theme", "light");
     }
-
-    postDebug(
-      "ThemeToggle toggled",
-      {
-        next,
-        stored: localStorage.getItem("theme"),
-        html_class: document.documentElement.className,
-        html_has_dark: document.documentElement.classList.contains("dark"),
-      },
-      "H3",
-      "pre-fix"
-    );
   }
 
   // Don't render until we know the real theme (avoids flicker)

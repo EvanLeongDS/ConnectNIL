@@ -1,0 +1,22 @@
+/* Sticky-based card stack: each card pins a little lower than the one before
+   it, so scrolling deals them into a deck. JS only handles scale + blur. */
+
+.scroll-stack-item {
+  position: sticky;
+}
+
+.scroll-stack-card {
+  transform-origin: 50% 0%;
+  transition: filter 0.15s linear;
+  will-change: transform, filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-stack-item {
+    position: static;
+  }
+  .scroll-stack-card {
+    transform: none !important;
+    filter: none !important;
+  }
+}

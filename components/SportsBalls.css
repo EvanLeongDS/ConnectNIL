@@ -1,0 +1,106 @@
+/* Motion only. Every ball's structural geometry — the absolutely-positioned
+   stack of base / surface / shade layers — is set inline in SportsBalls.tsx, so
+   a stale or missing copy of this file can dull the animation but can never
+   deal a ball out into three separate pieces. */
+
+.sports-balls {
+  overflow: hidden;
+}
+
+/* The seat holds a ball's place in the field. Its transform is written from the
+   frame loop in SportsBalls.tsx — resting position at stage 0, formation slot
+   once the pinned hero starts scrubbing. */
+.sports-ball-seat {
+  will-change: transform, filter;
+}
+
+/* Bloom colour for the glow that builds as the deal comes together. The frame
+   loop writes the radius into a drop-shadow and picks the colour up from here,
+   so the two themes can carry different glows without the loop knowing which is
+   in play. Light mode needs the more saturated blue — a pale glow just washes
+   out against white. */
+.sports-balls {
+  --cn-glow: rgba(31, 122, 224, 0.8);
+}
+
+.dark .sports-balls {
+  --cn-glow: rgba(140, 210, 255, 0.78);
+}
+
+/* The ball palette is built for a dark page: its lit side is a pale blue that
+   reads as highlight against #0d1117 but all but disappears against white,
+   leaving only the shadowed half visible — which is what makes the balls look
+   washed out and far away in light mode. Deepening and saturating them here
+   brings the blue back without touching the gradients themselves.
+
+   It sits on the sway layer rather than the seat because the frame loop owns the
+   seat's filter (depth-of-field blur plus the bloom) and an inline style would
+   win. Two filters, both on small elements: this one is a colour matrix with no
+   blur, so it costs almost nothing. */
+.sports-ball-bob {
+  filter: saturate(1.4) brightness(0.84);
+}
+
+.dark .sports-ball-bob {
+  filter: none;
+}
+
+/* Floating is two sways on separate elements — horizontal on .sports-ball,
+   vertical on .sports-ball-bob — running at different periods. Their sum is a
+   slow Lissajous wander, so a ball never retraces the same line back and forth
+   the way a single translate keyframe would. Both alternate, so the ball eases
+   to a stop at each extreme instead of snapping back to the start.
+
+   --amp scales both sways. The frame loop winds it down as the balls take up a
+   formation, so they settle into rank instead of jittering in place — running
+   animations pick up the new value, which a plain keyframe couldn't do. */
+.sports-ball,
+.sports-ball-bob {
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  will-change: transform;
+}
+
+.sports-ball {
+  animation-name: sports-ball-sway-x;
+}
+
+.sports-ball-bob {
+  animation-name: sports-ball-sway-y;
+}
+
+.sports-balls-field,
+.sports-ball-spin {
+  will-change: transform;
+}
+
+.sports-ball-spin {
+  animation-name: sports-ball-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes sports-ball-sway-x {
+  from { transform: translate3d(calc(var(--dx, 0px) * var(--amp, 1) * -1), 0, 0); }
+  to   { transform: translate3d(calc(var(--dx, 0px) * var(--amp, 1)), 0, 0); }
+}
+
+/* The slight scale reads as the ball drifting toward and away from the camera. */
+@keyframes sports-ball-sway-y {
+  from { transform: translate3d(0, calc(var(--dy, 0px) * var(--amp, 1) * -1), 0) scale(0.97); }
+  to   { transform: translate3d(0, calc(var(--dy, 0px) * var(--amp, 1)), 0) scale(1.03); }
+}
+
+@keyframes sports-ball-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sports-ball,
+  .sports-ball-bob,
+  .sports-ball-spin {
+    animation: none !important;
+  }
+}

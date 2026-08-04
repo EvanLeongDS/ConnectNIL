@@ -1,0 +1,210 @@
+/* Structure and motion for the pinned four-stage hero. Kept out of Tailwind
+   classes on purpose: the reduced-motion block below has to unwind the pinning
+   entirely, and overriding utility classes from a stylesheet means fighting
+   specificity with !important. Typography and colour stay in the JSX. */
+
+.stage-hero {
+  position: relative;
+  /* Scroll runway: the sticky child holds one viewport, so the extra 380vh is
+     what's left to scrub. The driver reserves a tail of that for the last stage
+     to settle in, leaving roughly 84vh per stage. */
+  height: 480vh;
+}
+
+/* The nav overlays this section rather than sitting above it in flow, so the
+   pin engages at scroll position 0 and nothing moves before the stages begin.
+   The padding is what the nav would have occupied — with border-box it comes
+   out of the 100vh, keeping the copy centred in the space below the nav
+   instead of centred behind it. */
+.stage-hero-pin {
+  position: sticky;
+  top: 0;
+  box-sizing: border-box;
+  display: flex;
+  height: 100vh;
+  padding-top: 4.5rem;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* Fades the ball field out from under the copy, left to right.
+
+   Many stops rather than four: a linear-gradient is piecewise linear, so every
+   stop is a kink in the alpha curve, and against a dark background the eye reads
+   those kinks as vertical bands (Mach banding) straight across the page. These
+   stops trace a smooth S-curve instead, which has no kinks to see.
+
+   It also has to be fully clear before the formation zone begins. The copy runs
+   out at roughly 62% of the width and the gathered balls start just past it, so
+   the ramp lands on zero by 67% — carried any further it washes a quarter of the
+   ball field in white and the chain never looks lit. */
+.stage-hero-scrim {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.945) 8%,
+    rgba(255, 255, 255, 0.93) 15%,
+    rgba(255, 255, 255, 0.9) 22%,
+    rgba(255, 255, 255, 0.855) 29%,
+    rgba(255, 255, 255, 0.79) 35%,
+    rgba(255, 255, 255, 0.71) 40%,
+    rgba(255, 255, 255, 0.61) 45%,
+    rgba(255, 255, 255, 0.49) 50%,
+    rgba(255, 255, 255, 0.36) 54%,
+    rgba(255, 255, 255, 0.22) 58%,
+    rgba(255, 255, 255, 0.11) 61%,
+    rgba(255, 255, 255, 0.04) 64%,
+    rgba(255, 255, 255, 0) 67%
+  );
+}
+
+.dark .stage-hero-scrim {
+  background: linear-gradient(
+    90deg,
+    rgba(13, 17, 23, 0.95) 0%,
+    rgba(13, 17, 23, 0.945) 8%,
+    rgba(13, 17, 23, 0.93) 15%,
+    rgba(13, 17, 23, 0.9) 22%,
+    rgba(13, 17, 23, 0.855) 29%,
+    rgba(13, 17, 23, 0.79) 35%,
+    rgba(13, 17, 23, 0.71) 40%,
+    rgba(13, 17, 23, 0.61) 45%,
+    rgba(13, 17, 23, 0.49) 50%,
+    rgba(13, 17, 23, 0.36) 54%,
+    rgba(13, 17, 23, 0.22) 58%,
+    rgba(13, 17, 23, 0.11) 61%,
+    rgba(13, 17, 23, 0.04) 64%,
+    rgba(13, 17, 23, 0) 67%
+  );
+}
+
+/* Narrow viewports have no clear right-hand gutter, so the formation runs down
+   the middle — the scrim has to become a flat wash to keep copy readable. */
+@media (max-width: 899px) {
+  .stage-hero-scrim {
+    background: rgba(255, 255, 255, 0.88);
+  }
+  .dark .stage-hero-scrim {
+    background: rgba(13, 17, 23, 0.88);
+  }
+}
+
+/* All four panels occupy the same box; only one is visible at a time. The box
+   has to reserve room for the tallest of them or the buttons below would jump
+   as stages change. */
+.stage-panels {
+  position: relative;
+  min-height: 21rem;
+}
+
+@media (min-width: 640px) {
+  .stage-panels {
+    min-height: 23rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .stage-panels {
+    min-height: 26rem;
+  }
+}
+
+/* No transitions here on purpose. Opacity and the two rise offsets are written
+   from the frame loop, straight off scroll position — a transition would fight
+   that and reintroduce the very lag that made stages feel like they were being
+   switched rather than scrolled through. visibility, not display, so a panel
+   leaves the accessibility tree without disturbing layout. */
+.stage-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  will-change: opacity;
+}
+
+.stage-panel-title {
+  transform: translate3d(0, var(--head-rise, 0px), 0);
+  will-change: transform;
+}
+
+.stage-panel-body {
+  transform: translate3d(0, var(--body-rise, 0px), 0);
+  will-change: transform;
+}
+
+/* Stage ticks — a pinned section gives no scrollbar feedback about how many
+   beats are left, so show them, each filling through its own stage. */
+.stage-dot {
+  position: relative;
+  height: 3px;
+  width: 2.5rem;
+}
+
+.stage-dot-track,
+.stage-dot-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.stage-dot-track {
+  opacity: 0.16;
+}
+
+.stage-dot-fill {
+  opacity: 0.72;
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+/* Reduced motion: unpin everything and lay the four stages out as ordinary
+   stacked sections. Without this the runway would be four blank screens. */
+@media (prefers-reduced-motion: reduce) {
+  .stage-hero {
+    height: auto;
+  }
+
+  /* Unpinned, the overlaid nav no longer has a pin to sit over — the first
+     stage has to clear it on its own, hence the larger top padding here. */
+  .stage-hero-pin {
+    position: static;
+    height: auto;
+    display: block;
+    padding-top: 9rem;
+    padding-bottom: 5rem;
+  }
+
+  /* The scrim stays: unpinned, it resolves against .stage-hero and covers all
+     four stacked stages, which is exactly the area the copy now occupies. */
+
+  .stage-panels {
+    position: static;
+    display: grid;
+    gap: 4.5rem;
+    min-height: 0;
+  }
+
+  /* !important because the panels carry inline opacity and rise for the
+     server-rendered first paint, and inline styles otherwise win. The driver
+     never runs under reduced motion, so those inline values would strand three
+     of the four stages invisible. */
+  .stage-panel {
+    position: static;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
+  .stage-panel-title,
+  .stage-panel-body {
+    transform: none;
+  }
+
+  .stage-dots {
+    display: none;
+  }
+}

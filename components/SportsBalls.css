@@ -14,17 +14,28 @@
   will-change: transform, filter;
 }
 
-/* Bloom colour for the glow that builds as the deal comes together. The frame
+/* Bloom colour for the glow that builds as the deals come together. The frame
    loop writes the radius into a drop-shadow and picks the colour up from here,
    so the two themes can carry different glows without the loop knowing which is
-   in play. Light mode needs the more saturated blue — a pale glow just washes
-   out against white. */
+   in play. Light mode needs the more saturated hue — a pale glow just washes
+   out against white.
+
+   Brands override it on their own seats: the glow has to come off the ball it
+   belongs to, or a red ball sits in a blue halo. */
 .sports-balls {
   --cn-glow: rgba(31, 122, 224, 0.8);
 }
 
 .dark .sports-balls {
   --cn-glow: rgba(140, 210, 255, 0.78);
+}
+
+.sports-ball-seat[data-tint="brand"] {
+  --cn-glow: rgba(224, 58, 47, 0.82);
+}
+
+.dark .sports-ball-seat[data-tint="brand"] {
+  --cn-glow: rgba(255, 148, 136, 0.78);
 }
 
 /* The ball palette is built for a dark page: its lit side is a pale blue that
@@ -41,7 +52,14 @@
   filter: saturate(1.4) brightness(0.84);
 }
 
-.dark .sports-ball-bob {
+/* The red needs far less of that help — it carries against white on its own, and
+   the same correction would turn it to brick. */
+.sports-ball-seat[data-tint="brand"] .sports-ball-bob {
+  filter: saturate(1.12) brightness(0.94);
+}
+
+.dark .sports-ball-bob,
+.dark .sports-ball-seat[data-tint="brand"] .sports-ball-bob {
   filter: none;
 }
 

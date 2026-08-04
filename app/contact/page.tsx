@@ -299,21 +299,6 @@ export default function ContactPage() {
             </button>
           </form>
         )}
-
-        {/* ── Info strip ── */}
-        <div className="mt-10 grid gap-4 sm:grid-cols-3">
-          {[
-            { icon: "⚡", label: "Fast replies", desc: "Usually within 24 hours" },
-            { icon: "🔒", label: "Private",      desc: "Your info stays with us" },
-            { icon: "🤝", label: "Partnerships", desc: "Open to all collaboration" },
-          ].map(({ icon, label, desc }) => (
-            <div key={label} className="rounded-2xl border border-black/10 bg-white p-5 text-center shadow-md dark:border-white/10 dark:bg-[#161b27]">
-              <div className="mb-2 text-2xl">{icon}</div>
-              <p className="text-sm font-semibold text-black dark:text-white">{label}</p>
-              <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">{desc}</p>
-            </div>
-          ))}
-        </div>
       </main>
     </div>
   );

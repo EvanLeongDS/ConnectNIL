@@ -73,6 +73,7 @@ export default function StageHero() {
     let raf = 0;
     let top = 0;
     let travel = 1;
+    let end = 0;
     let smooth = 0;
     let shown = -1;
 
@@ -82,16 +83,21 @@ export default function StageHero() {
        nothing here writes a property that dirties layout. */
     const measure = () => {
       top = section.getBoundingClientRect().top + window.scrollY;
+      const runway = Math.max(1, section.offsetHeight - window.innerHeight);
       /* Progress is spread over only part of the runway, leaving the last
          SETTLE_TAIL of it as dead scroll. The frame loop eases toward the
          scroll position rather than snapping to it, so without that margin the
          section would unpin — the page starting to move again — while the final
          stage was still fading in. It now reaches its resting state and holds
          before anything below comes up. */
-      travel = Math.max(1, (section.offsetHeight - window.innerHeight) * (1 - SETTLE_TAIL));
+      travel = runway * (1 - SETTLE_TAIL);
+      // Where the pin lets go: the sticky child has reached the bottom of the
+      // runway and the whole section starts moving up with the page.
+      end = top + runway;
     };
 
     const progressNow = () => clamp01((window.scrollY - top) / travel);
+    const releaseNow = () => Math.max(0, window.scrollY - end);
 
     /* Each panel's own copy of the timeline: 0 when its stage begins, 1 when the
        next one does, negative while it's still coming. Its text starts faded and
@@ -136,6 +142,7 @@ export default function StageHero() {
     const tick = () => {
       smooth += (progressNow() - smooth) * 0.12;
       stageScroll.progress = smooth;
+      stageScroll.release = releaseNow();
       paint(smooth);
 
       const next = stageFromProgress(smooth);
@@ -152,6 +159,7 @@ export default function StageHero() {
     // reloading mid-page, shouldn't replay the sequence from the start.
     smooth = progressNow();
     stageScroll.progress = smooth;
+    stageScroll.release = releaseNow();
     stageScroll.pinned = true;
     paint(smooth);
     shown = stageFromProgress(smooth);
@@ -168,6 +176,7 @@ export default function StageHero() {
       cancelAnimationFrame(raf);
       stageScroll.pinned = false;
       stageScroll.progress = 0;
+      stageScroll.release = 0;
       // Drop the inline values so the stylesheet takes over — that's what makes
       // the reduced-motion fallback readable if the setting is flipped on.
       for (const panel of panelsRef.current) {

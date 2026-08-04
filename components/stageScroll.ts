@@ -31,4 +31,15 @@ export const stageScroll = {
   progress: 0,
   /** False on pages with no stage hero — the background then stays at rest. */
   pinned: false,
+  /** px the page has scrolled past the end of the hero's runway — 0 for as long
+      as the section is still pinned.
+
+      The background is fixed to the viewport, which is what lets it hold the
+      formations while the hero scrubs. But the network is the end of that story:
+      once it has closed, the field has no business trailing the reader down into
+      the copy below. Riding this value upward hands the balls back to the page at
+      exactly the moment the hero lets go, so they scroll away with the section
+      that built them. Unsmoothed, unlike `progress` — anything else would have
+      the field sliding against the content it's supposed to be part of. */
+  release: 0,
 };

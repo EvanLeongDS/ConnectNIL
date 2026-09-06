@@ -56,12 +56,11 @@ export default function DashboardNav({ role, name }: DashboardNavProps) {
     <nav className="sticky top-0 z-20 border-b border-black/6 bg-white/95 backdrop-blur-sm dark:border-white/6 dark:bg-[#0d1117]/95">
       <div className="mx-auto flex max-w-7xl items-center gap-6 px-6 py-0 md:px-10">
         {/* Logo */}
-        <Link href="/" className="mr-4 shrink-0 py-4 transition hover:opacity-75">
-          <img
-            src="/connectnil-logo.png"
-            alt="ConnectNIL"
-            className="h-7 w-auto [mix-blend-mode:multiply] dark:invert dark:[mix-blend-mode:screen]"
-          />
+        <Link
+          href="/"
+          className="mr-4 shrink-0 py-4 text-xl font-black tracking-tight text-black transition hover:opacity-75 dark:text-white"
+        >
+          ConnectNIL
         </Link>
 
         {/* Nav links */}

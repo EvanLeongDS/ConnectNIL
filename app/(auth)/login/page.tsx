@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import AuthNav from "@/components/auth/AuthNav";
-import ParticlesBackground from "@/components/auth/ParticlesBackground";
+import AuthBackground from "@/components/auth/AuthBackground";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
-      <ParticlesBackground />
+      <AuthBackground />
       <main className="relative z-10 flex min-h-screen items-center justify-center px-8">
         <AuthNav />
 

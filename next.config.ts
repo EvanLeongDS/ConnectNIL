@@ -5,12 +5,25 @@ import path from "node:path";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
+      /* KEEP: proofs submitted before the S3 migration still live in Supabase Storage
+         and are rendered from these public URLs. Removing this breaks every existing
+         deliverable proof. */
       {
         protocol: "https",
         hostname: "*.supabase.co",
         pathname: "/storage/v1/object/public/**",
       },
+      /* Presigned S3 GET URLs for deliverable proofs. `search` is deliberately omitted:
+         Next only compares the query string when `search` is defined, so the ?X-Amz-*
+         signature params pass the match. The bucket name must contain no dots for the
+         single-label wildcard to apply. */
+      {
+        protocol: "https",
+        hostname: "*.s3.us-east-1.amazonaws.com",
+        pathname: "/deals/**",
+      },
     ],
+    minimumCacheTTL: 3600,
   },
 
   /* This project lives inside a Dropbox folder, and Dropbox syncing webpack's

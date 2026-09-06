@@ -8,6 +8,7 @@ import {
   PROOF_MAX_IMAGES,
   PROOF_MIN_DESCRIPTION_LENGTH,
   PROOF_MAX_FILE_BYTES,
+  isAllowedProofImageType,
 } from "@/lib/deals/deliverableProof";
 
 interface Props {
@@ -48,7 +49,14 @@ export default function DeliverableProofForm({
     const valid: ImageFile[] = [];
     for (const f of rawFiles) {
       if (images.length + valid.length >= PROOF_MAX_IMAGES) break;
-      if (!f.type.startsWith("image/")) continue;
+      if (!isAllowedProofImageType(f.type)) {
+        setError(`"${f.name}" is not a supported image type (JPEG, PNG, WebP, or GIF).`);
+        continue;
+      }
+      if (f.size === 0) {
+        setError(`"${f.name}" is empty.`);
+        continue;
+      }
       if (f.size > PROOF_MAX_FILE_BYTES) {
         setError(`"${f.name}" is larger than 5 MB — please compress or use a different image.`);
         continue;
@@ -83,10 +91,9 @@ export default function DeliverableProofForm({
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    const files = Array.from(e.dataTransfer.files).filter((f) =>
-      f.type.startsWith("image/")
-    );
-    addFiles(files);
+    // Pass everything through to addFiles so unsupported types get a visible error
+    // instead of being silently dropped.
+    addFiles(Array.from(e.dataTransfer.files));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [images]);
 
@@ -103,30 +110,125 @@ export default function DeliverableProofForm({
     }
 
     setLoading(true);
-    setUploadProgress(`Uploading ${images.length} image${images.length > 1 ? "s" : ""}…`);
 
     try {
-      const fd = new FormData();
-      fd.set("description", description.trim());
-      images.forEach((img) => fd.append("images", img.file));
+      // 1. Authorize and mint presigned URLs. Tiny JSON round-trip, no image bytes.
+      setUploadProgress("Preparing upload...");
+      const presignRes = await fetch(
+        `/api/deals/${dealId}/deliverables/${deliverableId}/proof-upload-url`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            files: images.map((i) => ({ contentType: i.file.type, size: i.file.size })),
+          }),
+        }
+      );
+      const presign = await presignRes.json().catch(() => ({}));
+      if (!presignRes.ok) {
+        setError(
+          typeof presign.error === "string" ? presign.error : "Could not start the upload."
+        );
+        return;
+      }
 
+      // Server reports the S3 driver is off: use the original multipart path unchanged.
+      if (presign.mode === "supabase") {
+        await legacyMultipartSubmit();
+        return;
+      }
+
+      // 2. PUT each file straight to S3. The bytes never touch our server, which is the
+      //    whole point: the old multipart POST could exceed the platform body cap.
+      const uploads: { key: string; url: string; contentType: string }[] =
+        presign.uploads ?? [];
+      if (uploads.length !== images.length) {
+        setError("Could not start the upload. Please reload and try again.");
+        return;
+      }
+
+      const keys: string[] = new Array(uploads.length);
+      let completed = 0;
+      const queue = uploads.map((u, i) => async () => {
+        // Send ONLY Content-Type. Any additional header that was not part of the
+        // signature makes S3 reject the PUT with 403 SignatureDoesNotMatch.
+        const putRes = await fetch(u.url, {
+          method: "PUT",
+          headers: { "Content-Type": u.contentType },
+          body: images[i].file,
+        });
+        if (!putRes.ok) throw new Error(`s3_put_${putRes.status}`);
+        keys[i] = u.key;
+        completed += 1;
+        setUploadProgress(`Uploaded ${completed} of ${uploads.length}...`);
+      });
+
+      // Bounded concurrency: parallel enough to feel fast, low enough not to saturate
+      // a phone uplink. fetch() has no upload progress events, so the counter above is
+      // per-file rather than per-byte.
+      const CONCURRENCY = 3;
+      const workers = Array.from(
+        { length: Math.min(CONCURRENCY, queue.length) },
+        async () => {
+          for (let job = queue.shift(); job; job = queue.shift()) await job();
+        }
+      );
+      await Promise.all(workers);
+
+      // 3. Commit: description plus the object keys. A few hundred bytes.
+      setUploadProgress("Finishing up...");
       const res = await fetch(
         `/api/deals/${dealId}/deliverables/${deliverableId}/submit`,
-        { method: "POST", body: fd }
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: description.trim(), keys }),
+        }
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(typeof data.error === "string" ? data.error : "Submission failed. Please try again.");
+        setError(
+          typeof data.error === "string" ? data.error : "Submission failed. Please try again."
+        );
         return;
       }
       router.push(successHref);
       router.refresh();
-    } catch {
-      setError("Network error — please try again.");
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message.startsWith("s3_put_")
+          ? "An image failed to upload. Check your connection and try again."
+          : "Network error - please try again."
+      );
     } finally {
       setLoading(false);
       setUploadProgress(null);
     }
+  }
+
+  /**
+   * The pre-S3 submit path. Retained so that flipping PROOF_STORAGE_DRIVER back to
+   * "supabase" restores the previous behaviour exactly, with no client deploy.
+   */
+  async function legacyMultipartSubmit() {
+    setUploadProgress(`Uploading ${images.length} image${images.length > 1 ? "s" : ""}...`);
+    const fd = new FormData();
+    fd.set("description", description.trim());
+    images.forEach((img) => fd.append("images", img.file));
+
+    const res = await fetch(
+      `/api/deals/${dealId}/deliverables/${deliverableId}/submit`,
+      { method: "POST", body: fd }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(
+        typeof data.error === "string" ? data.error : "Submission failed. Please try again."
+      );
+      return;
+    }
+    router.push(successHref);
+    router.refresh();
   }
 
   return (

@@ -1,0 +1,11 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/connectnil.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["README.md", "cdk*.json", "tsconfig.json", "package*.json", "node_modules", "cdk.out"]
+  },
+  "context": {
+    "connectnil:region": "us-east-1",
+    "connectnil:secretParamName": "/connectnil/proof-pipeline-secret"
+  }
+}

@@ -6,9 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verify:s3": "node scripts/verify-s3.mjs",
+    "verify:pipeline": "node scripts/verify-pipeline.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1126.0",
+    "@aws-sdk/s3-request-presigner": "^3.1126.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@stripe/stripe-js": "^4.5.0",
     "@supabase/ssr": "^0.5.1",
@@ -26,7 +30,6 @@
     "react-dom": "^19.0.0",
     "react-google-recaptcha": "^3.1.0",
     "resend": "^6.10.0",
-    "shadcn": "^4.1.2",
     "stripe": "^17.3.0",
     "tailwind-merge": "^3.5.0"
   },

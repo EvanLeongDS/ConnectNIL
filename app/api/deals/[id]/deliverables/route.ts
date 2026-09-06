@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseProofImageRefs, thumbKeyFor } from "@/lib/deals/deliverableProof";
+import { deleteProofObjects } from "@/lib/aws/s3";
 
 /**
  * PATCH /api/deals/[id]/deliverables
@@ -78,13 +80,39 @@ export async function PATCH(
             proof_description: null,
             proof_image_urls: [],
             submitted_at: null,
+            // The analysis describes images that are about to stop existing. Leaving it
+            // would show the next reviewer a moderation verdict for a deleted proof.
+            proof_analysis: {},
+            proof_review_flag: "pending" as const,
           };
+
+    // Rejecting clears proof_image_urls, which would otherwise leave the uploaded S3
+    // objects orphaned with nothing referencing them. Collect the keys before the update
+    // so they can be cleaned up after it commits.
+    let orphanKeys: string[] = [];
+    if (action === "reject") {
+      const { data: row } = await service
+        .from("deliverables")
+        .select("proof_image_urls")
+        .eq("id", deliverable_id)
+        .maybeSingle();
+      const proofKeys = parseProofImageRefs(row?.proof_image_urls)
+        .filter((r): r is { kind: "s3"; key: string } => r.kind === "s3")
+        .map((r) => r.key);
+      // Each proof object has a generated thumbnail under thumbs/. Nothing else
+      // references it, so it orphans exactly as the original would.
+      orphanKeys = [...proofKeys, ...proofKeys.map(thumbKeyFor)];
+    }
 
     const { error: upErr } = await service.from("deliverables").update(updates).eq("id", deliverable_id);
     if (upErr) {
       console.error("deliverable review:", upErr);
       return NextResponse.json({ error: "Could not update deliverable." }, { status: 500 });
     }
+
+    // Best-effort, after the row is committed. Legacy Supabase-hosted proofs are left in
+    // place: removing those needs URL-to-path parsing and old demo objects cost nothing.
+    await deleteProofObjects(orphanKeys);
 
     return NextResponse.json({ success: true, status: action === "approve" ? "approved" : "rejected" });
   }

@@ -1,13 +1,13 @@
-/* Structure and motion for the pinned four-stage hero. Kept out of Tailwind
-   classes on purpose: the reduced-motion block below has to unwind the pinning
-   entirely, and overriding utility classes from a stylesheet means fighting
-   specificity with !important. Typography and colour stay in the JSX. */
+/* Structure and motion for the pinned hero. Kept out of Tailwind classes on
+   purpose: the reduced-motion block below has to unwind the pinning entirely,
+   and overriding utility classes from a stylesheet means fighting specificity
+   with !important. Typography and colour stay in the JSX. */
 
 .stage-hero {
   position: relative;
   /* Scroll runway: the sticky child holds one viewport, so the extra 380vh is
-     what's left to scrub. The driver reserves a tail of that for the last stage
-     to settle in, leaving roughly 84vh per stage. */
+     what's left to scrub. The driver reserves a tail of that for the last
+     formation to settle in, leaving roughly 84vh per formation. */
   height: 480vh;
 }
 
@@ -109,11 +109,12 @@
   }
 }
 
-/* No transitions here on purpose. Opacity and the two rise offsets are written
-   from the frame loop, straight off scroll position — a transition would fight
-   that and reintroduce the very lag that made stages feel like they were being
-   switched rather than scrolled through. visibility, not display, so a panel
-   leaves the accessibility tree without disturbing layout. */
+/* No transitions here on purpose. Opacity, visibility and the copy's rise are
+   all written by the GSAP timeline, straight off scroll position — a transition
+   would fight the scrub and reintroduce the very lag that made stages feel like
+   they were being switched rather than scrolled through. visibility (via
+   autoAlpha), not display, so a spent panel leaves the accessibility tree
+   without disturbing the layout of the box all four share. */
 .stage-panel {
   position: absolute;
   inset: 0;
@@ -125,13 +126,9 @@
   will-change: opacity;
 }
 
-.stage-panel-title {
-  transform: translate3d(0, var(--head-rise, 0px), 0);
-  will-change: transform;
-}
-
+/* Transforms come from GSAP; these only promote the layers it will write to. */
+.stage-panel-title,
 .stage-panel-body {
-  transform: translate3d(0, var(--body-rise, 0px), 0);
   will-change: transform;
 }
 
@@ -189,19 +186,14 @@
     min-height: 0;
   }
 
-  /* !important because the panels carry inline opacity and rise for the
-     server-rendered first paint, and inline styles otherwise win. The driver
+  /* !important because the panels carry inline opacity and visibility for the
+     server-rendered first paint, and inline styles otherwise win. The timeline
      never runs under reduced motion, so those inline values would strand three
      of the four stages invisible. */
   .stage-panel {
     position: static;
     opacity: 1 !important;
     visibility: visible !important;
-  }
-
-  .stage-panel-title,
-  .stage-panel-body {
-    transform: none;
   }
 
   .stage-dots {

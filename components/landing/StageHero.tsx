@@ -1,24 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import TextAnimate from "./TextAnimate";
-import {
-  REVEAL_RISE,
-  STAGE_COUNT,
-  clamp01,
-  smoothstep,
-  stageFromProgress,
-  stageScroll,
-} from "@/components/stageScroll";
+import { REVEAL_RISE, STAGE_COUNT, stageScroll } from "@/components/stageScroll";
 import "./StageHero.css";
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 /* ─── Pinned four-stage hero ──────────────────────────────────────────────────
    The section is a tall scroll runway with a sticky child that holds one
-   viewport. Scrolling it doesn't move anything — it scrubs a 0→1 progress value
-   that selects which of the four copy panels is showing and, through
-   stageScroll, which formation the background balls hold. Copy crossfades in
-   place; the balls do the travelling.
+   viewport. Scrolling it doesn't move anything — it scrubs a GSAP timeline whose
+   playhead *is* the sequence: one second of timeline per stage, so a tween
+   placed at 2.75 is three-quarters of the way through stage three. That timeline
+   crossfades the copy panels, rises their text, fills the ticks, and hands its
+   own progress to the background through stageScroll, which decides which
+   formation the balls hold. Copy stays put; the balls do the travelling.
 ────────────────────────────────────────────────────────────────────────────── */
 
 const STAGES = [
@@ -44,150 +48,178 @@ const STAGES = [
     finish settling while the section is still pinned. */
 const SETTLE_TAIL = 0.12;
 
+/** Scrub catch-up (s). Replaces the hand-rolled lerp toward scroll position —
+    the stages ease into place instead of snapping frame-for-frame with input. */
+const SCRUB = 0.6;
+
 export default function StageHero() {
   const sectionRef = useRef<HTMLElement>(null);
   const panelsRef = useRef<(HTMLDivElement | null)[]>([]);
   const fillsRef = useRef<(HTMLSpanElement | null)[]>([]);
-  const [stage, setStage] = useState(0);
-  const [reduced, setReduced] = useState(false);
 
-  /* Tracked as state rather than read once: the CSS fallback below keys off the
-     same query, so if the setting is flipped mid-session the stylesheet re-pins
-     the hero and the driver has to come back with it — otherwise the runway
-     becomes four blank screens. */
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setReduced(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
-    /* Reduced motion keeps the CSS fallback: the runway collapses and all four
-       stages render as ordinary stacked sections, so there's nothing to drive. */
-    if (reduced) return;
 
-    let raf = 0;
-    let top = 0;
-    let travel = 1;
-    let end = 0;
-    let smooth = 0;
-    let shown = -1;
+    /* matchMedia rather than a media-query listener of our own: it adds the
+       driver when motion is allowed and reverts it if the setting is flipped
+       mid-session, which is exactly when the stylesheet re-pins or unpins the
+       hero underneath us. */
+    const mm = gsap.matchMedia();
 
-    /* Section geometry is only read on resize — never inside the frame loop,
-       where a layout read after the background's style writes would force a
-       synchronous reflow every frame. Scroll position is safe to read per frame:
-       nothing here writes a property that dirties layout. */
-    const measure = () => {
-      top = section.getBoundingClientRect().top + window.scrollY;
-      const runway = Math.max(1, section.offsetHeight - window.innerHeight);
-      /* Progress is spread over only part of the runway, leaving the last
-         SETTLE_TAIL of it as dead scroll. The frame loop eases toward the
-         scroll position rather than snapping to it, so without that margin the
-         section would unpin — the page starting to move again — while the final
-         stage was still fading in. It now reaches its resting state and holds
-         before anything below comes up. */
-      travel = runway * (1 - SETTLE_TAIL);
-      // Where the pin lets go: the sticky child has reached the bottom of the
-      // runway and the whole section starts moving up with the page.
-      end = top + runway;
-    };
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      stageScroll.pinned = true;
 
-    const progressNow = () => clamp01((window.scrollY - top) / travel);
-    const releaseNow = () => Math.max(0, window.scrollY - end);
-
-    /* Each panel's own copy of the timeline: 0 when its stage begins, 1 when the
-       next one does, negative while it's still coming. Its text starts faded and
-       lifted and is fully out by the time its stage arrives, so the emerging is
-       something you scroll through rather than something that fires at a
-       boundary. Heading and body run on slightly offset windows, which keeps the
-       stagger without any transition to trigger. */
-    const paint = (progress: number) => {
       const panels = panelsRef.current;
+      const fills = fillsRef.current;
 
-      for (let k = 0; k < STAGE_COUNT; k++) {
+      /* Progress is spread over only part of the runway, leaving the last
+         SETTLE_TAIL of it as dead scroll. The scrub eases toward the scroll
+         position rather than snapping to it, so without that margin the section
+         would unpin — the page starting to move again — while the final stage
+         was still fading in. */
+      const travel = () =>
+        Math.max(1, (section.offsetHeight - window.innerHeight) * (1 - SETTLE_TAIL));
+
+      /* One second of timeline per stage. Nothing here plays on its own: the
+         scrub drags the playhead, so every tween below is really a mapping from
+         scroll position to state, and its ease is a curve through the stage
+         rather than a curve through time. */
+      const tl = gsap.timeline({
+        defaults: { ease: "none" },
+        scrollTrigger: {
+          trigger: section,
+          start: "top top",
+          end: () => `+=${travel()}`,
+          scrub: SCRUB,
+          invalidateOnRefresh: true,
+        },
+        /* The background is a sibling outside this subtree and reads progress
+           from a module-level object rather than through props, so hand it the
+           playhead on every scrubbed frame. */
+        onUpdate: () => {
+          stageScroll.progress = tl.progress();
+        },
+      });
+
+      STAGES.forEach((_, k) => {
         const panel = panels[k];
-        if (!panel) continue;
 
-        const u = progress * STAGE_COUNT - k;
-        /* One panel is nearly gone before the next starts to show. These windows
-           only just touch, because every panel sits in the same box: overlap any
-           wider and a 8xl heading lingers as a legible ghost across the one
-           replacing it. The first stage has nothing to emerge from and the last
-           nothing to give way to, so they skip the corresponding ramp. */
-        const arriving = k === 0 ? 1 : smoothstep(-0.14, 0.06, u);
-        const leaving = k === STAGE_COUNT - 1 ? 1 : 1 - smoothstep(0.75, 0.92, u);
-        const opacity = arriving * leaving;
+        if (panel) {
+          const title = panel.querySelector(".stage-panel-title");
+          const body = panel.querySelector(".stage-panel-body");
 
-        panel.style.opacity = opacity.toFixed(3);
-        panel.style.visibility = opacity < 0.015 ? "hidden" : "visible";
+          /* A panel's copy starts faded and lifted and is fully in by the time
+             its stage arrives, so the emerging is something you scroll through
+             rather than something that fires at a boundary. The body trails the
+             heading in by 0.08 of a stage — the stagger, expressed as timeline
+             position instead of a transition delay.
 
-        // Body copy trails the heading in and leads it out.
-        const late = k === 0 ? 1 : smoothstep(-0.06, 0.14, u);
-        const headRise = REVEAL_RISE * (1 - arriving) - REVEAL_RISE * 0.45 * (1 - leaving);
-        const bodyRise = REVEAL_RISE * (1 - late) - REVEAL_RISE * 0.7 * (1 - leaving);
-        panel.style.setProperty("--head-rise", `${headRise.toFixed(2)}px`);
-        panel.style.setProperty("--body-rise", `${bodyRise.toFixed(2)}px`);
+             autoAlpha, not opacity: it parks visibility:hidden at zero, so a
+             spent panel leaves the accessibility tree and stops taking pointer
+             events without display:none disturbing the layout of the box all
+             four share.
 
-        // Ticks fill through their own stage, so the section always shows how far
-        // along it is.
-        const fill = fillsRef.current[k];
-        if (fill) fill.style.transform = `scaleX(${clamp01(u).toFixed(3)})`;
+             The first stage has nothing to emerge from — it's the page's first
+             paint, handled by TextAnimate — so it gets no arrival. */
+          if (k > 0) {
+            tl.fromTo(
+              panel,
+              { autoAlpha: 0 },
+              { autoAlpha: 1, duration: 0.2, ease: "power1.inOut" },
+              k - 0.14
+            )
+              .fromTo(
+                title,
+                { y: REVEAL_RISE },
+                { y: 0, duration: 0.2, ease: "power2.out" },
+                k - 0.14
+              )
+              .fromTo(
+                body,
+                { y: REVEAL_RISE },
+                { y: 0, duration: 0.2, ease: "power2.out" },
+                k - 0.06
+              );
+          }
+
+          /* And out again, leading with the body. The exit only just clears the
+             next panel's entrance, because every panel sits in the same box:
+             overlap any wider and an 8xl heading lingers as a legible ghost
+             across the one replacing it. immediateRender:false so building these
+             doesn't stamp their start values over the arrival tweens above.
+
+             The last stage has nothing to give way to, so it holds. */
+          if (k < STAGE_COUNT - 1) {
+            tl.to(
+              panel,
+              {
+                autoAlpha: 0,
+                duration: 0.17,
+                ease: "power1.inOut",
+                immediateRender: false,
+              },
+              k + 0.75
+            )
+              .to(
+                title,
+                { y: -REVEAL_RISE * 0.45, duration: 0.17, immediateRender: false },
+                k + 0.75
+              )
+              .to(
+                body,
+                { y: -REVEAL_RISE * 0.7, duration: 0.17, immediateRender: false },
+                k + 0.68
+              );
+          }
+        }
+
+        /* Ticks fill through their own stage — one whole second each — so the
+           section always shows how far along it is. */
+        if (fills[k]) {
+          tl.fromTo(fills[k], { scaleX: 0 }, { scaleX: 1, duration: 1 }, k);
+        }
+      });
+
+      /* Land where the scroll position already is — arriving on an anchor link,
+         or reloading mid-page, shouldn't replay the sequence from stage one.
+         Setting the playhead directly skips the scrub's catch-up for this frame. */
+      const linked = tl.scrollTrigger;
+      if (linked) {
+        tl.progress(linked.progress);
+        stageScroll.progress = tl.progress();
       }
-    };
 
-    const tick = () => {
-      smooth += (progressNow() - smooth) * 0.12;
-      stageScroll.progress = smooth;
-      stageScroll.release = releaseNow();
-      paint(smooth);
+      /* Where the pin lets go. The background is fixed to the viewport, which is
+         what lets it hold the formations while the hero scrubs — but once the
+         network has closed, the field has no business trailing the reader down
+         into the copy below. Riding this value hands the balls back to the page
+         at the moment the hero releases. Unsmoothed, unlike progress. */
+      ScrollTrigger.create({
+        trigger: section,
+        start: "bottom bottom",
+        end: "max",
+        onUpdate: (self) => {
+          stageScroll.release = Math.max(0, self.scroll() - self.start);
+        },
+        onLeaveBack: () => {
+          stageScroll.release = 0;
+        },
+      });
 
-      const next = stageFromProgress(smooth);
-      if (next !== shown) {
-        shown = next;
-        setStage(next);
-      }
+      /* The timeline and its triggers belong to this matchMedia context, so GSAP
+         kills them and restores every property it touched on the way out — which
+         is what hands the panels back to the stylesheet if reduced motion is
+         switched on mid-session. Only the shared scroll state is ours to reset. */
+      return () => {
+        stageScroll.pinned = false;
+        stageScroll.progress = 0;
+        stageScroll.release = 0;
+      };
+    });
 
-      raf = requestAnimationFrame(tick);
-    };
-
-    measure();
-    // Land where the scroll position already is — arriving on an anchor link, or
-    // reloading mid-page, shouldn't replay the sequence from the start.
-    smooth = progressNow();
-    stageScroll.progress = smooth;
-    stageScroll.release = releaseNow();
-    stageScroll.pinned = true;
-    paint(smooth);
-    shown = stageFromProgress(smooth);
-    setStage(shown);
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(section);
-    window.addEventListener("resize", measure);
-    raf = requestAnimationFrame(tick);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", measure);
-      cancelAnimationFrame(raf);
-      stageScroll.pinned = false;
-      stageScroll.progress = 0;
-      stageScroll.release = 0;
-      // Drop the inline values so the stylesheet takes over — that's what makes
-      // the reduced-motion fallback readable if the setting is flipped on.
-      for (const panel of panelsRef.current) {
-        if (!panel) continue;
-        panel.style.opacity = "";
-        panel.style.visibility = "";
-        panel.style.removeProperty("--head-rise");
-        panel.style.removeProperty("--body-rise");
-      }
-    };
-  }, [reduced]);
+    return () => mm.revert();
+  }, []);
 
   return (
     <section ref={sectionRef} className="stage-hero">
@@ -197,24 +229,19 @@ export default function StageHero() {
         <div className="relative mx-auto w-full max-w-7xl px-6 md:px-10">
           <div className="stage-panels">
             {STAGES.map((item, i) => (
-              /* Opacity and rise are set inline so the server-rendered markup
-                 already shows the first stage and hides the rest; from mount on,
-                 the frame loop owns them. */
+              /* Visibility is set inline so the server-rendered markup already
+                 shows the first stage and hides the rest; from mount on, the
+                 timeline owns it (as autoAlpha, which writes both of these). */
               <div
                 key={item.title}
                 ref={(el) => {
                   panelsRef.current[i] = el;
                 }}
                 className="stage-panel"
-                data-active={i === stage}
-                style={
-                  {
-                    opacity: i === 0 ? 1 : 0,
-                    visibility: i === 0 ? "visible" : "hidden",
-                    "--head-rise": i === 0 ? "0px" : `${REVEAL_RISE}px`,
-                    "--body-rise": i === 0 ? "0px" : `${REVEAL_RISE}px`,
-                  } as React.CSSProperties
-                }
+                style={{
+                  opacity: i === 0 ? 1 : 0,
+                  visibility: i === 0 ? "visible" : "hidden",
+                }}
               >
                 {i === 0 ? (
                   <>
@@ -266,7 +293,7 @@ export default function StageHero() {
 
           <div className="stage-dots mt-12 flex items-center gap-2" aria-hidden>
             {Array.from({ length: STAGE_COUNT }, (_, i) => (
-              <span key={i} className="stage-dot" data-active={i === stage}>
+              <span key={i} className="stage-dot">
                 <span className="stage-dot-track" />
                 {/* Separate element, not a child of the track: a track dimmed
                     with opacity would drag the fill down with it. */}

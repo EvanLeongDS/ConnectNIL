@@ -7,11 +7,8 @@
    loop. No React involved, no renders, one source of truth.
 ────────────────────────────────────────────────────────────────────────────── */
 
+/** Stages the hero scrubs through — one copy panel and one ball formation each. */
 export const STAGE_COUNT = 4;
-
-/** Which of the four stages a 0→1 progress value lands in. */
-export const stageFromProgress = (progress: number) =>
-  Math.min(STAGE_COUNT - 1, Math.floor(progress * STAGE_COUNT));
 
 export const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 

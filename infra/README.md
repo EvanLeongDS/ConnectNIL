@@ -71,12 +71,47 @@ npm run deploy
 
 ### 3. Wire the app
 
-- Set `PROOF_PIPELINE_SECRET` in the Vercel project environment.
+- Set `PROOF_PIPELINE_SECRET` in the Vercel project environment, byte-identical to the
+  SecureString value from step 1. The callback verifies an HMAC with it and 401s every
+  report if the two differ; unset, it fails closed with a 503.
 - Flip `PROOF_STORAGE_DRIVER` to `s3`. Until this happens, proofs go to the legacy
   Supabase bucket, no S3 event fires, and the pipeline never runs.
 - Apply `supabase/migrations/019_proof_analysis.sql` in the Supabase SQL editor.
-- If the OIDC role was deployed, set `AWS_ROLE_ARN` to the `VercelRoleArn` stack output
-  and delete `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` from the deployment.
+- Set the S3 credentials under the `S3_*` names, never `AWS_*`. Vercel functions run on
+  Lambda, whose runtime injects its own `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
+  `AWS_REGION`; `lib/aws/s3.ts` therefore ignores the `AWS_*` names on Vercel entirely,
+  and honours them only locally.
+- If the OIDC role was deployed, set `AWS_ROLE_ARN` to the `VercelRoleArn` stack output.
+  It takes precedence over the static keys the moment it is present. **Verify with the
+  probe below, and only then delete `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`.**
+  Deleting them first leaves the app with no usable credentials, and it does not error —
+  it falls back to the legacy Supabase path, so the pipeline you just deployed silently
+  never runs. Unsetting `AWS_ROLE_ARN` reverts to the keys instantly.
+
+### 3a. Make sure the Lambda can actually reach the callback
+
+The Lambda carries no Vercel session, so two deployment settings decide whether its report
+ever lands:
+
+- `connectnil:callbackUrl` must be the **stable production domain**. It is baked into the
+  Lambda's environment at deploy time, so changing domains means redeploying this stack. A
+  preview URL will not do — previews are protection-gated by default.
+- If **Deployment Protection** is enabled on production, the POST receives an HTML login
+  page and the HMAC check is never reached. Disable it for production, or configure a
+  Protection Bypass for Automation.
+
+One request checks the whole chain. It returns booleans and the region only — no secret,
+key, ARN or bucket name — so it is safe to leave unauthenticated:
+
+```bash
+curl -s https://<your-site>/api/internal/proof-processed
+# {"route":"proof-processed","secretConfigured":true,
+#  "storage":{"credentials":"oidc","driver":"s3","onVercel":true,...}}
+```
+
+- HTML instead of JSON -> Deployment Protection is intercepting the callback.
+- `"secretConfigured": false` -> every report will 503.
+- `"credentials":"none"` or `"driver":"supabase"` -> nothing will ever reach the pipeline.
 
 ### 4. Verify
 

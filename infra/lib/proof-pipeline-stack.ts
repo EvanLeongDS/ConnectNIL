@@ -84,6 +84,13 @@ export class ProofPipelineStack extends Stack {
         // installs it inside the Linux build image for the target architecture instead.
         nodeModules: ["sharp"],
         forceDockerBundling: true,
+        // `nodeModules` makes CDK run `npm ci` INSIDE the Linux container, which by default
+        // also creates node_modules/.bin/* as POSIX symlinks. CDK then fingerprints that
+        // directory from the host, and on Windows readlink() on a Linux symlink fails with
+        // EINVAL — synth dies after the (slow) install has already succeeded. Lambda never
+        // executes those bin shims, so switching them off costs nothing and makes the build
+        // work on Windows as well as on Linux/macOS.
+        environment: { NPM_CONFIG_BIN_LINKS: "false" },
         // The AWS SDK v3 clients are provided by the Node 22 runtime; bundling them
         // would add megabytes for no behavioural gain.
         externalModules: ["@aws-sdk/*"],

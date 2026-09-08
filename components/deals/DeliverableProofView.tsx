@@ -1,15 +1,59 @@
 import Image from "next/image";
-import { parseProofImageUrls } from "@/lib/deals/deliverableProof";
+import { parseProofImageRefs } from "@/lib/deals/deliverableProof";
+import { parseProofAnalysis, proofReviewFlag } from "@/lib/deals/proofAnalysis";
+import { presignProofDownload } from "@/lib/aws/s3";
 
 interface Props {
   description?: string | null;
   imageUrls?: unknown;
+  /** Raw deliverables.proof_analysis (migration 019). Omit to render without the verdict. */
+  analysis?: unknown;
+  /** Brand reviewers get the automated verdict; athletes and teams just see their proof. */
+  showAnalysis?: boolean;
   className?: string;
 }
 
-export default function DeliverableProofView({ description, imageUrls, className = "" }: Props) {
-  const urls = parseProofImageUrls(imageUrls);
-  if (!description?.trim() && urls.length === 0) return null;
+/**
+ * Server component. Resolves the mixed-format proof_image_urls array into renderable
+ * srcs: legacy Supabase public URLs pass through verbatim, S3 keys are presigned here.
+ *
+ * Presigning is pure local HMAC - no network call, no AWS request, no cost - so doing it
+ * per deliverable during render is microseconds. Safe to await inside the dashboard pages,
+ * all three of which are async server components.
+ *
+ * The grid shows the pipeline's WebP thumbnail where one exists and the original only on
+ * click. Proofs predating the pipeline, and legacy Supabase-hosted ones, have no thumbnail
+ * and fall back to the full image exactly as before.
+ */
+export default async function DeliverableProofView({
+  description,
+  imageUrls,
+  analysis,
+  showAnalysis = false,
+  className = "",
+}: Props) {
+  const refs = parseProofImageRefs(imageUrls);
+  if (!description?.trim() && refs.length === 0) return null;
+
+  const parsed = parseProofAnalysis(analysis);
+  const s3Keys = refs.filter((r) => r.kind === "s3").map((r) => (r as { key: string }).key);
+  const flag = proofReviewFlag(parsed, s3Keys);
+
+  const items = await Promise.all(
+    refs.map(async (r) => {
+      if (r.kind === "url") return { full: r.url, thumb: r.url, flagged: false };
+      const entry = parsed[r.key];
+      const full = await presignProofDownload(r.key);
+      return {
+        full,
+        thumb: entry?.thumbKey ? await presignProofDownload(entry.thumbKey) : full,
+        flagged: Boolean(entry?.moderation.flagged),
+      };
+    })
+  );
+
+  const mentioned = s3Keys.some((k) => parsed[k]?.brandMention.matched);
+  const matchedOn = [...new Set(s3Keys.flatMap((k) => parsed[k]?.brandMention.matchedOn ?? []))];
 
   return (
     <div className={`rounded-xl border border-black/8 bg-black/2 p-4 dark:border-white/8 dark:bg-white/5 ${className}`}>
@@ -21,21 +65,68 @@ export default function DeliverableProofView({ description, imageUrls, className
           {description.trim()}
         </p>
       )}
-      {urls.length > 0 && (
+
+      {showAnalysis && s3Keys.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {flag === "flagged" && (
+            <Badge tone="danger">Flagged by automated review — open each image before approving</Badge>
+          )}
+          {flag === "pending" && <Badge tone="muted">Not analysed</Badge>}
+          {flag === "clean" && <Badge tone="ok">No moderation flags</Badge>}
+
+          {flag !== "pending" &&
+            (mentioned ? (
+              <Badge tone="ok">
+                Brand mention found{matchedOn.length > 0 ? `: ${matchedOn.join(", ")}` : ""}
+              </Badge>
+            ) : (
+              <Badge tone="warn">No brand mention detected</Badge>
+            ))}
+        </div>
+      )}
+
+      {items.length > 0 && (
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {urls.map((url) => (
+          {items.map((item, i) => (
             <a
-              key={url}
-              href={url}
+              key={i}
+              href={item.full}
               target="_blank"
               rel="noopener noreferrer"
               className="relative aspect-square overflow-hidden rounded-lg border border-black/6 bg-black/5 dark:border-white/10"
             >
-              <Image src={url} alt="Deliverable proof" fill className="object-cover" sizes="(max-width: 640px) 50vw, 200px" />
+              {/* key is the index, not the src: presigned URLs rotate each signing window
+                  and using them as React keys would remount the images needlessly. */}
+              <Image
+                src={item.thumb}
+                alt="Deliverable proof"
+                fill
+                className="object-cover"
+                sizes="(max-width: 640px) 50vw, 200px"
+              />
+              {showAnalysis && item.flagged && (
+                <span className="absolute inset-x-0 bottom-0 bg-red-600/90 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                  Flagged
+                </span>
+              )}
             </a>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+function Badge({ tone, children }: { tone: "ok" | "warn" | "danger" | "muted"; children: React.ReactNode }) {
+  const tones = {
+    ok: "border-green-600/25 bg-green-600/10 text-green-700 dark:text-green-400",
+    warn: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    danger: "border-red-600/30 bg-red-600/10 text-red-700 dark:text-red-400",
+    muted: "border-black/10 bg-black/5 text-black/50 dark:border-white/10 dark:bg-white/5 dark:text-white/45",
+  } as const;
+  return (
+    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tones[tone]}`}>
+      {children}
+    </span>
   );
 }

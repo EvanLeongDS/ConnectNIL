@@ -37,7 +37,9 @@ export default function ContactPage() {
   const [serverError, setServerError] = useState("");
   const [captchaError, setCaptchaError] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const [isDark, setIsDark] = useState<boolean | null>(null);
+  const [isDark, setIsDark] = useState<boolean>(
+    () => typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+  );
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const widgetIdRef = useRef<number | null>(null);
   const captchaContainerRef = useRef<HTMLDivElement>(null);
@@ -52,30 +54,45 @@ export default function ContactPage() {
   }, []);
 
   useEffect(() => {
-    if (document.querySelector('script[data-recaptcha]')) {
-      if (window.grecaptcha) setScriptLoaded(true);
-      return;
+    const onLoad = () => setScriptLoaded(true);
+    const existing = document.querySelector<HTMLScriptElement>("script[data-recaptcha]");
+    if (existing) {
+      /* A second mount — React’s dev double-invoke, or a client-side revisit — finds the tag
+         already in the head. Go straight ahead if the API has booted; otherwise wait on the
+         request already in flight rather than injecting a duplicate. */
+      if (window.grecaptcha) onLoad();
+      else existing.addEventListener("load", onLoad);
+      return () => existing.removeEventListener("load", onLoad);
     }
     const script = document.createElement("script");
     script.src = "https://www.google.com/recaptcha/api.js?render=explicit";
     script.async = true;
     script.defer = true;
     script.dataset.recaptcha = "1";
-    script.onload = () => setScriptLoaded(true);
+    script.addEventListener("load", onLoad);
     document.head.appendChild(script);
+    return () => script.removeEventListener("load", onLoad);
   }, []);
 
   useEffect(() => {
-    if (!scriptLoaded || isDark === null || !captchaContainerRef.current) return;
+    const host = captchaContainerRef.current;
+    if (!scriptLoaded || !host) return;
     const sitekey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
     if (!sitekey) return;
-    const container = captchaContainerRef.current;
+
+    /* grecaptcha marks the element it renders into and refuses a second render on it —
+       "reCAPTCHA has already been rendered in this element" — and clearing innerHTML does
+       not clear that mark. Both the dev-mode double-invoke of this effect and every theme
+       flip run it again, so each run renders into its own throwaway child of the host and
+       the cleanup discards that child. A fresh node is also the only way to re-theme: the
+       theme option is read once, at render time, and reset() will not revisit it. */
+    let cancelled = false;
+    const slot = document.createElement("div");
+    host.replaceChildren(slot);
+
     window.grecaptcha.ready(() => {
-      if (widgetIdRef.current !== null) {
-        try { window.grecaptcha.reset(widgetIdRef.current); } catch {}
-      }
-      container.innerHTML = "";
-      widgetIdRef.current = window.grecaptcha.render(container, {
+      if (cancelled) return;
+      widgetIdRef.current = window.grecaptcha.render(slot, {
         sitekey,
         theme: isDark ? "dark" : "light",
         callback: (token) => { setCaptchaToken(token); setCaptchaError(""); },
@@ -83,6 +100,12 @@ export default function ContactPage() {
       });
       setCaptchaToken(null);
     });
+
+    return () => {
+      cancelled = true;
+      widgetIdRef.current = null;
+      slot.remove();
+    };
   }, [scriptLoaded, isDark]);
 
   function resetCaptcha() {
@@ -271,18 +294,9 @@ export default function ContactPage() {
             </div>
 
             {/* reCAPTCHA */}
-            <div className="contact-recaptcha mt-6 dark:rounded-xl dark:border dark:border-white/10 dark:bg-[#161b27] dark:p-3">
+            <div className="contact-recaptcha mt-6">
               <div className="recaptcha-fringe-mask">
                 <div ref={captchaContainerRef} />
-                <div
-                  className="pointer-events-none absolute inset-0 z-[3] hidden rounded-[0.375rem] dark:block"
-                  aria-hidden
-                >
-                  <div className="absolute inset-x-0 top-0 h-3 bg-[#161b27]" />
-                  <div className="absolute inset-x-0 bottom-0 h-3 bg-[#161b27]" />
-                  <div className="absolute inset-y-0 right-0 w-4 bg-[#161b27]" />
-                  <div className="absolute inset-y-0 left-0 w-1.5 bg-[#161b27]" />
-                </div>
               </div>
               {captchaError && (
                 <p className="mt-1 text-xs text-red-500 dark:text-red-400">{captchaError}</p>

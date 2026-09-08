@@ -89,13 +89,19 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
 
   if (!isDirectAthlete && !participation && !isOnTeam) notFound();
 
-  const { data: deliverableRows } = await service
+  const { data: deliverableRows, error: deliverablesError } = await service
     .from("deliverables")
     .select(
-      "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at"
+      "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at, proof_analysis, proof_review_flag"
     )
     .eq("partnership_id", id)
     .order("created_at");
+  if (deliverablesError) {
+    // Most likely migration 019 has not been applied yet. Left unlogged, this renders
+    // the deal with no deliverables at all, which reads as data loss rather than as a
+    // missing column.
+    console.error("deal detail: deliverables query failed:", deliverablesError);
+  }
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
 
   const { data: paymentRows } = await service
@@ -212,6 +218,7 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
                         <DeliverableProofView
                           description={del.proof_description}
                           imageUrls={del.proof_image_urls}
+                          analysis={del.proof_analysis}
                           className="mt-2"
                         />
                         {canSubmitDeliverables && (del.status === "pending" || del.status === "rejected") && (

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import AuthNav from "@/components/auth/AuthNav";
-import ParticlesBackground from "@/components/auth/ParticlesBackground";
+import AuthBackground from "@/components/auth/AuthBackground";
 import TiltedCard from "@/components/TiltedCard";
 
 const roles = [
@@ -31,7 +31,7 @@ export default function RoleSelectPage() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
-      <ParticlesBackground />
+      <AuthBackground />
       <main className="relative z-10 flex min-h-screen items-center justify-center px-6">
         <AuthNav />
         <div className="w-full max-w-5xl space-y-10 text-center">

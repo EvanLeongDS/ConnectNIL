@@ -1,7 +1,18 @@
 "use client";
 
-import { Children, useCallback, useEffect, useRef } from "react";
+import { Children, useEffect, useLayoutEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./ScrollStack.css";
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
+
+// useLayoutEffect so the first paint already carries GSAP's starting values;
+// React warns about it during SSR, where it never runs anyway.
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 type ScrollStackProps = {
   children: React.ReactNode;
@@ -16,9 +27,9 @@ type ScrollStackProps = {
   itemScale?: number;
   /** Blur (px) added per card stacked on top. */
   blurPerLevel?: number;
+  /** Scrub smoothing (s) — how long the deck takes to catch up to the scroll. */
+  smoothing?: number;
 };
-
-const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n);
 
 export function ScrollStackItem({
   children,
@@ -38,12 +49,12 @@ export default function ScrollStack({
   itemDistance = 96,
   itemScale = 0.05,
   blurPerLevel = 1.1,
+  smoothing = 0.35,
 }: ScrollStackProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef(0);
   const items = Children.toArray(children);
 
-  const update = useCallback(() => {
+  useIsomorphicLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
 
@@ -52,49 +63,67 @@ export default function ScrollStack({
     );
     if (!wrappers.length) return;
 
-    // How far a card travels (px of scroll) while it shrinks the ones beneath it.
-    const travel = Math.max(1, window.innerHeight * 0.6);
+    const cards = wrappers.map(
+      (wrapper) => wrapper.firstElementChild as HTMLElement | null
+    );
 
-    // progress[i] — 0 when card i is still well below its pin point, 1 once pinned.
-    const progress = wrappers.map((wrapper, i) => {
-      const pin = stackTop + i * stackGap;
-      const distanceToPin = wrapper.getBoundingClientRect().top - pin;
-      return clamp01((travel - distanceToPin) / travel);
+    // Reduced motion is handled in the stylesheet, which unpins the deck
+    // outright — so there's nothing for GSAP to drive.
+    const mm = gsap.matchMedia(root);
+
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      // How far a card travels (px of scroll) while it presses the ones beneath
+      // it back. A function so a resize re-reads it on ScrollTrigger.refresh().
+      const travel = () => Math.max(1, window.innerHeight * 0.6);
+      const pinOf = (i: number) => stackTop + i * stackGap;
+
+      // depth[i] — 0 while card i is still well below its pin point, 1 once
+      // pinned. GSAP owns the interpolation; the scrub adds the smoothing the
+      // old rAF listener couldn't give us.
+      const depth = new Array(wrappers.length).fill(0);
+
+      const applyDepth = () => {
+        cards.forEach((card, i) => {
+          if (!card) return;
+
+          // Every card stacked on top of this one presses it further back.
+          let stacked = 0;
+          for (let j = i + 1; j < wrappers.length; j++) stacked += depth[j];
+
+          const blur = stacked * blurPerLevel;
+          gsap.set(card, {
+            scale: Math.max(0.72, 1 - stacked * itemScale),
+            filter: blur > 0.06 ? `blur(${blur.toFixed(2)}px)` : "none",
+          });
+        });
+      };
+
+      wrappers.forEach((wrapper, i) => {
+        const proxy = { p: 0 };
+
+        gsap.to(proxy, {
+          p: 1,
+          ease: "none",
+          scrollTrigger: {
+            trigger: wrapper,
+            // From `travel` px below this card's pin point, up to the pin itself.
+            start: () => `top ${pinOf(i) + travel()}`,
+            end: () => `top ${pinOf(i)}`,
+            scrub: smoothing,
+            invalidateOnRefresh: true,
+          },
+          onUpdate: () => {
+            depth[i] = proxy.p;
+            applyDepth();
+          },
+        });
+      });
+
+      applyDepth();
     });
 
-    wrappers.forEach((wrapper, i) => {
-      const card = wrapper.firstElementChild as HTMLElement | null;
-      if (!card) return;
-
-      // Every card stacked on top of this one presses it further back.
-      let depth = 0;
-      for (let j = i + 1; j < wrappers.length; j++) depth += progress[j];
-
-      const scale = Math.max(0.72, 1 - depth * itemScale);
-      const blur = depth * blurPerLevel;
-
-      card.style.transform = `scale(${scale.toFixed(4)})`;
-      card.style.filter = blur > 0.06 ? `blur(${blur.toFixed(2)}px)` : "";
-    });
-  }, [stackTop, stackGap, itemScale, blurPerLevel]);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    const onScroll = () => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(update);
-    };
-
-    update();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, [update]);
+    return () => mm.revert();
+  }, [stackTop, stackGap, itemScale, blurPerLevel, smoothing, items.length]);
 
   return (
     <div ref={rootRef} className={className}>

@@ -67,6 +67,10 @@ export interface DeliverableRow {
   proof_description?: string | null;
   proof_image_urls?: string[] | null;
   submitted_at?: string | null;
+  /** Automated pipeline output, keyed by proof object key (migration 019). Parsed by
+   *  parseProofAnalysis in lib/deals/proofAnalysis.ts - never read the raw shape. */
+  proof_analysis?: unknown;
+  proof_review_flag?: "flagged" | "clean" | "pending" | null;
   created_at: string;
 }
 

@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "noEmit": true,
+    "typeRoots": ["./node_modules/@types"]
+  },
+  "//": [
+    "Two app modules are included on purpose: the proof-processor Lambda imports the key-shape and",
+    "analysis helpers directly rather than keeping a second copy of them. Only those two files - the",
+    "rest of lib/deals uses the @/ path alias and server-only imports this package does not have."
+  ],
+  "include": [
+    "bin/**/*.ts",
+    "lib/**/*.ts",
+    "lambda/**/*.ts",
+    "../lib/deals/deliverableProof.ts",
+    "../lib/deals/proofAnalysis.ts"
+  ],
+  "exclude": ["node_modules", "cdk.out"]
+}

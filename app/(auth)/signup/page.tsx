@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { navigateAfterSignUp } from "@/lib/auth/signupRedirect";
 import AuthNav from "@/components/auth/AuthNav";
-import ParticlesBackground from "@/components/auth/ParticlesBackground";
+import AuthBackground from "@/components/auth/AuthBackground";
 
 function SignupPageInner() {
   const router = useRouter();
@@ -58,7 +58,7 @@ function SignupPageInner() {
   if (success) {
     return (
       <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
-        <ParticlesBackground />
+        <AuthBackground />
         <main className="relative z-10 flex min-h-screen items-center justify-center px-8">
           <AuthNav />
           <div className="w-full max-w-sm space-y-4 text-center">
@@ -78,7 +78,7 @@ function SignupPageInner() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
-      <ParticlesBackground />
+      <AuthBackground />
       <main className="relative z-10 flex min-h-screen items-center justify-center px-8">
         <AuthNav />
 
@@ -155,7 +155,7 @@ export default function SignupPage() {
     <Suspense
       fallback={
         <div className="relative min-h-screen overflow-x-hidden text-black dark:text-white">
-          <ParticlesBackground />
+          <AuthBackground />
           <main className="relative z-10 flex min-h-screen items-center justify-center px-8">
             <AuthNav />
             <p className="text-sm text-black/50 dark:text-white/50">Loading…</p>

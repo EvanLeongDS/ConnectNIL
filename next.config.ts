@@ -22,6 +22,16 @@ const nextConfig: NextConfig = {
         hostname: "*.s3.us-east-1.amazonaws.com",
         pathname: "/deals/**",
       },
+      /* The pipeline's generated WebP thumbnails. These live under `thumbs/`, deliberately
+         OUTSIDE the `deals/` prefix that triggers the Lambda (see thumbKeyFor), so they do
+         not match the pattern above and need their own entry — without it next/image
+         answers 400 "url parameter is not allowed" and every analysed proof renders
+         broken. */
+      {
+        protocol: "https",
+        hostname: "*.s3.us-east-1.amazonaws.com",
+        pathname: "/thumbs/deals/**",
+      },
     ],
     minimumCacheTTL: 3600,
   },

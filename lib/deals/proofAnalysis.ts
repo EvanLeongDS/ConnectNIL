@@ -137,7 +137,12 @@ export function isModerationFlagged(labels: ProofModerationLabel[]): boolean {
  */
 export function proofReviewFlag(analysis: ProofAnalysis, imageKeys: string[]): ProofReviewFlag {
   if (imageKeys.length === 0) return "pending";
-  if (imageKeys.some((k) => !analysis[k])) return "pending";
+  // An entry carrying `error` is the pipeline saying "I could not analyse this", which is
+  // exactly as unanalysed as having no entry at all. It must count as "pending": its
+  // moderation.labels are empty for want of a Rekognition call, not because the image came
+  // back clean, and letting it fall through would render a green "No moderation flags" on
+  // an image nothing ever looked at.
+  if (imageKeys.some((k) => !analysis[k] || analysis[k].error)) return "pending";
   if (imageKeys.some((k) => analysis[k].moderation.flagged)) return "flagged";
   return "clean";
 }

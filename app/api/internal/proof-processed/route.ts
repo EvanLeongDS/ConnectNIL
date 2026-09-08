@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { createServiceClient } from "@/lib/supabase/server";
+import { describeS3Config } from "@/lib/aws/s3";
 import { parseProofKey, parseProofImageRefs, thumbKeyFor } from "@/lib/deals/deliverableProof";
 import {
   brandMentionNeedles,
@@ -170,6 +171,29 @@ export async function POST(request: NextRequest) {
   // applied:false when the object is no longer one of this deliverable's proofs — a
   // resubmit replaced it between upload and analysis. The stale entry is simply not stored.
   return NextResponse.json({ ok: true, applied: currentKeys.includes(key) });
+}
+
+/**
+ * GET /api/internal/proof-processed
+ *
+ * Reachability and configuration probe. The two failure modes that are otherwise invisible
+ * from outside a deployment both become one curl against the deployed site:
+ *
+ *   - Deployment Protection intercepting the Lambda's POST. The Lambda would receive an
+ *     HTML login page rather than this route, so anything but JSON here means the callback
+ *     URL is unreachable no matter how correct the signature is.
+ *   - The app quietly serving the legacy Supabase path because S3 never resolved
+ *     credentials, which stops the pipeline firing at all (see proofStorageDriver).
+ *
+ * Returns booleans and the region only — never a key, secret, ARN or bucket name — so it is
+ * safe to leave unauthenticated next to an HMAC-only POST.
+ */
+export async function GET() {
+  return NextResponse.json({
+    route: "proof-processed",
+    secretConfigured: Boolean(process.env.PROOF_PIPELINE_SECRET),
+    storage: describeS3Config(),
+  });
 }
 
 /** The Lambda's report. Every field is treated as untrusted and re-validated above. */

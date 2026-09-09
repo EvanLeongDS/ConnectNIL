@@ -152,9 +152,12 @@ function credentials() {
   if (mode === "static") {
     return { accessKeyId: ACCESS_KEY_ID, secretAccessKey: SECRET_ACCESS_KEY };
   }
-  // Unreachable through the app's own call paths — every caller is behind isS3Configured()
-  // via proofStorageDriver(). Explicit so a future caller fails loudly instead of signing
-  // requests with empty strings and getting an opaque 403 back from S3.
+  // Write paths reach this only behind proofStorageDriver(), which is itself behind
+  // isS3Configured(). READ paths have no such funnel — presignProofDownload is called during
+  // page render, so its callers must check isS3Configured() themselves or an unconfigured
+  // deployment 500s the whole page (see components/deals/DeliverableProofView.tsx, which
+  // learned this the hard way). Throwing here is deliberate: better a loud failure than
+  // signing requests with empty strings and getting an opaque 403 back from S3.
   throw new Error(
     "S3 is not configured: set AWS_ROLE_ARN (Vercel OIDC) or S3_ACCESS_KEY_ID + S3_SECRET_ACCESS_KEY."
   );
@@ -197,6 +200,10 @@ export function presignProofUpload(
       // The browser sends only Content-Type (plus the Content-Length it sets itself), and
       // sending Content-Disposition would additionally require widening the bucket CORS
       // AllowedHeaders. It buys nothing: browsers render image/* inline regardless.
+      //
+      // The matching bucket CORS rule is NOT managed by CDK — the bucket is imported. It is
+      // documented, with the reasoning for each field, under "Bucket settings not managed
+      // here" in infra/README.md, and checked by `npm run verify:s3`.
     }),
     {
       expiresIn: WRITE_TTL,

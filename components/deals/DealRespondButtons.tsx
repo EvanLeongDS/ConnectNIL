@@ -41,7 +41,9 @@ export default function DealRespondButtons({ dealId }: { dealId: string }) {
         setError(data.error ?? "Something went wrong.");
         return;
       }
-      router.push("/dashboard/team-dashboard/deals");
+      // Stay on the deal. It re-renders with the signature block filled and the
+      // deliverables now actionable, which is what the manager needs to see next —
+      // pushing to the list made them hunt for the row they had just signed.
       router.refresh();
     } catch {
       setError("Network error. Please try again.");

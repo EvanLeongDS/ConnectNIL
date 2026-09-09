@@ -75,12 +75,21 @@ export default async function BrandEditDealPage({ params }: Props) {
       <DashboardNav role="brand-manager" name={name} />
       <main className="mx-auto max-w-2xl px-6 py-10 md:px-10">
         <div className="mb-8">
+          {/* Three levels, matching every other deep page — the top-level Deals link was
+              missing and the middle crumb said "Deal" rather than naming it. */}
           <div className="mb-4 flex items-center gap-2 text-sm">
             <Link
-              href={`/dashboard/brand-dashboard/deals/${id}`}
+              href="/dashboard/brand-dashboard/deals"
               className="text-black/40 hover:text-black dark:text-white/35 dark:hover:text-white"
             >
-              Deal
+              Deals
+            </Link>
+            <span className="text-black/25 dark:text-white/20">/</span>
+            <Link
+              href={`/dashboard/brand-dashboard/deals/${id}`}
+              className="max-w-[16rem] truncate text-black/40 hover:text-black dark:text-white/35 dark:hover:text-white"
+            >
+              {d.title}
             </Link>
             <span className="text-black/25 dark:text-white/20">/</span>
             <span className="text-black/60 dark:text-white/50">Edit</span>

@@ -8,10 +8,14 @@ import { navigateAfterSignUp } from "@/lib/auth/signupRedirect";
 import AuthNav from "@/components/auth/AuthNav";
 import AuthBackground from "@/components/auth/AuthBackground";
 
+/** The only roles the app can route. Anything else produces an unusable account. */
+const VALID_ROLES = ["athlete", "brand-manager", "team-manager"] as const;
+
 function SignupPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const role = searchParams.get("role") ?? "";
+  const roleIsValid = (VALID_ROLES as readonly string[]).includes(role);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +26,15 @@ function SignupPageInner() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Reaching /signup without a valid ?role= used to store role:"" on the account, which
+    // left the user permanently unable to load any dashboard. Send them to pick one instead
+    // of creating something broken.
+    if (!roleIsValid) {
+      router.replace("/role");
+      return;
+    }
+
     setLoading(true);
 
     const supabase = createClient();

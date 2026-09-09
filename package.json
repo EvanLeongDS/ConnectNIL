@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "verify:s3": "node scripts/verify-s3.mjs",
-    "verify:pipeline": "node scripts/verify-pipeline.mjs"
+    "verify:pipeline": "node scripts/verify-pipeline.mjs",
+    "test:logic": "node --experimental-strip-types scripts/test-logic.mts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1126.0",

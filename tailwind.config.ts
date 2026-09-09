@@ -9,6 +9,28 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      /* Tailwind resolves a `/n` colour modifier against theme.opacity, whose default scale
+       * is multiples of 5. The design uses a finer low end — 2%/3% tints and 6%/8%/12%
+       * hairlines — and every one of those utilities was compiling to NOTHING, silently:
+       * no error, no warning, just a missing declaration.
+       *
+       * The damage was invisible for borders only, because globals.css `* { @apply
+       * border-border }` supplies a fallback colour. Backgrounds have no such safety net, so
+       * `bg-black/2 dark:bg-white/3` really did render nothing — which is why every contract
+       * section header sits flush against its body, every progress-bar track is missing, and
+       * several hover states never fire.
+       *
+       * Extending the scale is the whole fix: `extend` merges, so 0/5/10/15/… are untouched,
+       * and Tailwind is JIT so unused steps emit no CSS. Rewriting 276 call sites to the
+       * nearest valid step would instead change the design — /2 -> /5 is a 2.5x tint.
+       */
+      opacity: {
+        2: "0.02",
+        3: "0.03",
+        6: "0.06",
+        8: "0.08",
+        12: "0.12",
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },

@@ -13,15 +13,11 @@ import {
   DEAL_CATEGORY_LABELS,
   PAYMENT_TYPE_LABELS,
   formatCurrency,
+  formatCents,
   formatDate,
+  deliverableStatusMeta,
+  isAwaitingSubmission,
 } from "@/lib/deals/types";
-
-const DELIVERABLE_STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  pending:   { label: "Pending",   cls: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400" },
-  submitted: { label: "Submitted", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400" },
-  approved:  { label: "Approved",  cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400" },
-  rejected:  { label: "Rejected",  cls: "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400" },
-};
 
 function normalizeFrequency(f: string | null | undefined): DeliverableFrequency {
   if (f === "daily" || f === "weekly" || f === "monthly" || f === "season" || f === "one_time") return f;
@@ -184,13 +180,16 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
               {deliverables.length === 0 ? (
                 <p className="text-sm text-black/45 dark:text-white/35">No deliverables listed for this deal.</p>
               ) : (() => {
-                const notStarted      = deliverables.filter((del) => del.status === "pending" || del.status === "rejected");
-                const pendingApproval = deliverables.filter((del) => del.status === "submitted");
-                const approved        = deliverables.filter((del) => del.status === "approved");
+                // Number by position in the contract, not within the group — grouping is a
+                // view, but "deliverable 3" has to mean the same thing to every party.
+                const numbered = deliverables.map((del, i) => ({ del, index: i }));
+                const notStarted      = numbered.filter((d) => isAwaitingSubmission(d.del.status));
+                const pendingApproval = numbered.filter((d) => d.del.status === "submitted");
+                const approved        = numbered.filter((d) => d.del.status === "approved");
 
                 function DeliverableItem({ del, index }: { del: typeof deliverables[0]; index: number }) {
                   const freq = normalizeFrequency(del.frequency);
-                  const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
+                  const statusInfo = deliverableStatusMeta(del.status);
                   return (
                     <li className="flex gap-3 text-sm">
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
@@ -221,7 +220,7 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
                           analysis={del.proof_analysis}
                           className="mt-2"
                         />
-                        {canSubmitDeliverables && (del.status === "pending" || del.status === "rejected") && (
+                        {canSubmitDeliverables && isAwaitingSubmission(del.status) && (
                           <div className="mt-2">
                             <Link
                               href={proofHref(del.id)}
@@ -247,37 +246,34 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
 
                 return (
                   <div className="space-y-6">
-                    {/* Not started */}
-                    <div>
-                      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
-                        Not started
-                      </p>
-                      {notStarted.length === 0 ? (
-                        <p className="text-xs text-black/30 dark:text-white/25 italic">None</p>
-                      ) : (
+                    {/* Empty groups render nothing at all. A new deal used to open on a
+                        scaffold of three headings with italic "None" under two of them,
+                        which reads as broken rather than as "nothing to do yet". */}
+                    {notStarted.length > 0 && (
+                      <div>
+                        <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                          Not started
+                        </p>
                         <ol className="space-y-4">
-                          {notStarted.map((del, i) => (
-                            <DeliverableItem key={del.id} del={del} index={i} />
+                          {notStarted.map(({ del, index }) => (
+                            <DeliverableItem key={del.id} del={del} index={index} />
                           ))}
                         </ol>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
-                    {/* Pending approval */}
-                    <div>
-                      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
-                        Pending approval
-                      </p>
-                      {pendingApproval.length === 0 ? (
-                        <p className="text-xs text-black/30 dark:text-white/25 italic">None</p>
-                      ) : (
+                    {pendingApproval.length > 0 && (
+                      <div>
+                        <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
+                          Pending approval
+                        </p>
                         <ol className="space-y-4">
-                          {pendingApproval.map((del, i) => (
-                            <DeliverableItem key={del.id} del={del} index={i} />
+                          {pendingApproval.map(({ del, index }) => (
+                            <DeliverableItem key={del.id} del={del} index={index} />
                           ))}
                         </ol>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Approved — always rendered, collapsed by default */}
                     <details className="group">
@@ -302,8 +298,8 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
                         <p className="mt-3 pl-4 text-xs text-black/30 dark:text-white/25 italic">None yet</p>
                       ) : (
                         <ol className="mt-4 space-y-4 border-l-2 border-emerald-200 pl-4 dark:border-emerald-800/40">
-                          {approved.map((del, i) => (
-                            <DeliverableItem key={del.id} del={del} index={i} />
+                          {approved.map(({ del, index }) => (
+                            <DeliverableItem key={del.id} del={del} index={index} />
                           ))}
                         </ol>
                       )}
@@ -346,63 +342,6 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
           </div>
         )}
 
-        {deliverables.length > 0 && (
-          <div className="mt-6 overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
-            <div className="border-b border-black/6 bg-black/2 px-8 py-5 dark:border-white/6 dark:bg-white/3">
-              <p className="text-xs font-bold uppercase tracking-widest text-black/35 dark:text-white/30">
-                Deliverables
-              </p>
-              {!canSubmitDeliverables && showTeamOptIn && (
-                <p className="mt-1 text-sm text-black/45 dark:text-white/35">
-                  Accept the partnership above to unlock proof submission.
-                </p>
-              )}
-            </div>
-            <div className="divide-y divide-black/5 dark:divide-white/5">
-              {deliverables.map((del, i) => {
-                const freq = normalizeFrequency(del.frequency);
-                const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
-                return (
-                  <div key={del.id} className="flex items-start gap-4 px-8 py-5">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
-                      {i + 1}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-black dark:text-white">{del.title}</p>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusInfo.cls}`}>
-                          {statusInfo.label}
-                        </span>
-                      </div>
-                      {del.description && (
-                        <p className="mt-0.5 text-sm text-black/55 dark:text-white/45">{del.description}</p>
-                      )}
-                      <p className="mt-0.5 text-xs text-black/40 dark:text-white/35">
-                        {DELIVERABLE_FREQUENCY_LABELS[freq]}
-                        {del.due_date ? ` · Due ${formatDate(del.due_date)}` : ""}
-                      </p>
-                      <div className="mt-3">
-                        {canSubmitDeliverables && (del.status === "pending" || del.status === "rejected") ? (
-                          <Link
-                            href={proofHref(del.id)}
-                            className="inline-flex rounded-lg bg-[#1f7ae0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1a6bc9]"
-                          >
-                            {del.status === "rejected" ? "Resubmit proof" : "Submit proof"}
-                          </Link>
-                        ) : del.status === "submitted" ? (
-                          <p className="text-xs text-black/40 dark:text-white/35">Awaiting brand review…</p>
-                        ) : del.status === "approved" ? (
-                          <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Approved</p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {(isActive || d.status === "completed") && (
           <div className="mt-6 overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/8 dark:bg-[#161b27]">
             <div className="border-b border-black/6 bg-black/2 px-8 py-5 dark:border-white/6 dark:bg-white/3">
@@ -421,7 +360,7 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
                 <div>
                   <p className="text-sm text-black/50 dark:text-white/40">Paid so far</p>
                   <p className="text-xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency((d.paid_cents ?? 0) / 100)}
+                    {formatCents(d.paid_cents ?? 0)}
                   </p>
                 </div>
                 <span
@@ -457,7 +396,7 @@ export default async function AthleteDealDetailPage({ params, searchParams }: Pr
                         · {formatDate(p.paid_at)}
                       </p>
                       <span className="text-sm font-semibold text-black dark:text-white">
-                        {formatCurrency(p.net_cents / 100)}
+                        {formatCents(p.net_cents)}
                         <span className="ml-1 text-xs font-normal text-black/40 dark:text-white/35">(net)</span>
                       </span>
                     </div>

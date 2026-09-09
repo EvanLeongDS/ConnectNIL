@@ -123,7 +123,7 @@ npm run verify:pipeline   # the pipeline end to end
 ## Bucket settings not managed here
 
 The bucket is imported, so CloudFormation will not change its configuration — that is the
-point, but it means two things are done by hand, once:
+point, but it means three things are done by hand, once:
 
 ```bash
 # Versioning: proof images are evidence attached to a signed NIL agreement.
@@ -149,6 +149,55 @@ aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-confi
     }
   ]
 }'
+```
+
+### CORS — required, or no proof upload works at all
+
+> Already applied to the current bucket (verified by `npm run verify:s3` and a direct
+> preflight from the production origin). Recorded here because it is invisible in the CDK
+> app, and a new bucket or environment needs it set again.
+
+The browser PUTs proof images **straight to S3** using a presigned URL, so the bucket has to
+allow that cross-origin request. Without this rule every upload fails at the last step, and
+because a CORS rejection reaches JavaScript as an ordinary `TypeError` it is indistinguishable
+from being offline — the athlete just sees a network error and retries forever.
+
+```bash
+aws s3api put-bucket-cors --bucket <bucket> --cors-configuration '{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["http://localhost:3000", "https://connect-nil.vercel.app"],
+      "AllowedMethods": ["PUT", "GET", "HEAD"],
+      "AllowedHeaders": ["Content-Type"],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3000
+    }
+  ]
+}'
+```
+
+Every field here is derived from the code, and each is narrower than it might look:
+
+- **`PUT` is the one that matters.** It is the only cross-origin request the browser makes;
+  proof images are *read* through `next/image`, which fetches them server-side, and the
+  full-size link is a top-level navigation, so neither is subject to CORS. `GET`/`HEAD` are
+  present on the live bucket and harmless — the bucket is private, so they still get you
+  nothing without a valid presigned signature. Drop them if you prefer the tighter rule.
+- **`AllowedHeaders: ["Content-Type"]` and nothing more.** The presigned signature covers
+  `host, content-type, content-length` (`lib/aws/s3.ts`, `presignProofUpload`), and the client
+  deliberately sends only `Content-Type`; `Content-Length` is set by the browser and is
+  CORS-safelisted. Adding `x-amz-*` or `Content-Disposition` here does not make anything more
+  permissive — it makes working uploads start failing with `403 SignatureDoesNotMatch`.
+- **Origins are exact** — scheme, host and port, no trailing slash and no path. Vercel preview
+  deployments get per-deployment hostnames, so previews cannot upload unless you also add
+  `https://*.vercel.app`, which is broad; leaving previews unable to upload is the safer default.
+
+Verify with the existing pre-flight script rather than by hand — it sends a real OPTIONS
+request for each origin and also asserts that an unrelated origin is *refused*, so a blanket
+`"*"` rule fails the check:
+
+```bash
+npm run verify:s3
 ```
 
 ## Notes

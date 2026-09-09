@@ -54,7 +54,9 @@ export default async function AthleteDiscoverPage() {
             Brand Recommendations
           </h1>
           <p className="mt-1 text-sm text-black/45 dark:text-white/40">
-            Brands ranked by how well they match your sport, school, and location.
+            Brands ranked by how well they match your sport, school, and location. This is a
+            reference list — brands and team managers start the conversation, so reach out
+            through the links on a card if you see a fit.
           </p>
         </div>
 

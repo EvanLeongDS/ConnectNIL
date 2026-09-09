@@ -6,6 +6,7 @@ import InitiatePaymentButton from "@/components/deals/InitiatePaymentButton";
 import { DeliverableReviewButtons } from "@/components/deals/DeliverableActions";
 import DeliverableProofView from "@/components/deals/DeliverableProofView";
 import {
+  deliverableStatusMeta,
   DealRow,
   DeliverableRow,
   DealPaymentRow,
@@ -16,17 +17,11 @@ import {
   DEAL_STATUS_COLORS,
   DEAL_STATUS_LABELS,
   formatCurrency,
+  formatCents,
   formatDate,
   computeNumMonths,
   installmentAmountCents,
 } from "@/lib/deals/types";
-
-const DELIVERABLE_STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  pending:   { label: "Pending",   cls: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400" },
-  submitted: { label: "Submitted", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400" },
-  approved:  { label: "Approved",  cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400" },
-  rejected:  { label: "Rejected",  cls: "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400" },
-};
 
 function normalizeFrequency(f: string | null | undefined): DeliverableFrequency {
   if (f === "daily" || f === "weekly" || f === "monthly" || f === "season" || f === "one_time") return f;
@@ -117,6 +112,13 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
     }
   });
 
+  /* Any row still mid-flight. `failed` is deliberately excluded everywhere in this file:
+     a reconciled-as-failed payment must put the Pay button back, not keep the deal looking
+     blocked. That is what turned an abandoned checkout into a permanent dead end. */
+  const anyPaymentOpen = payments.some(
+    (p) => p.status === "processing" || p.status === "pending"
+  );
+
   // For one_time
   const oneTimePaid = payments.find((p) => p.status === "paid");
   const oneTimeInProgress = !oneTimePaid && payments.find((p) => p.status === "processing" || p.status === "pending");
@@ -154,14 +156,24 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
             Your proposal was updated. The team will see the latest version when they review it.
           </div>
         )}
-        {payment === "success" && (
+        {/* The return route reconciles against Stripe before redirecting here, so by this
+            point the row really is settled. Kept conditional on there being no payment still
+            open, so the banner can never sit above a "Payment started" panel and contradict
+            it — which is exactly what it used to do. */}
+        {payment === "success" && !anyPaymentOpen && (
           <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-400">
             Payment received! Thank you — we&apos;ve recorded the transaction.
           </div>
         )}
+        {payment === "success" && anyPaymentOpen && (
+          <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300">
+            Thanks — we&apos;re still confirming this payment with Stripe. It will appear below
+            within a minute or two.
+          </div>
+        )}
         {payment === "cancelled" && (
           <div className="mb-6 rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700 dark:border-yellow-800/50 dark:bg-yellow-900/20 dark:text-yellow-400">
-            Payment was cancelled. You can try again below.
+            Payment was cancelled — no charge was made. You can start it again below.
           </div>
         )}
 
@@ -187,7 +199,7 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
               {d.payment_status === "paid"
                 ? "Fully paid"
                 : d.payment_status === "partial"
-                ? `Partial — ${formatCurrency(d.paid_cents / 100)} paid`
+                ? `Partial — ${formatCents(d.paid_cents)} paid`
                 : "Payment due"}
             </span>
           )}
@@ -246,7 +258,7 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
                 <ol className="space-y-4">
                   {deliverables.map((del, i) => {
                     const freq = normalizeFrequency(del.frequency);
-                    const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
+                    const statusInfo = deliverableStatusMeta(del.status);
                     const delPaid = paidByDeliverable.get(del.id);
                     const delInProgress = processingByDeliverable.get(del.id);
 
@@ -306,15 +318,21 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
                                     ((d.total_value ?? 0) * 100) / Math.max(1, deliverables.length)
                                   )}
                                   deliverableId={del.id}
-                                  label={`Pay for this deliverable`}
                                 />
                               </div>
                             )}
 
                           {delInProgress && !delPaid && (
-                            <p className="mt-1.5 text-xs text-black/45 dark:text-white/40">
-                              Payment in progress…
-                            </p>
+                            <div className="mt-1.5">
+                              <InitiatePaymentButton
+                                dealId={id}
+                                amountCents={Math.floor(
+                                  ((d.total_value ?? 0) * 100) / Math.max(1, deliverables.length)
+                                )}
+                                deliverableId={del.id}
+                                label="Resume checkout"
+                              />
+                            </div>
                           )}
                         </div>
                       </li>
@@ -391,7 +409,13 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
                       ✓ Paid {formatDate(oneTimePaid.paid_at)}
                     </span>
                   ) : oneTimeInProgress ? (
-                    <span className="text-sm text-black/45 dark:text-white/40">Payment in progress…</span>
+                    // Not dead text: the pay route hands back the still-open Stripe session,
+                    // so this drops the brand back into the checkout they left.
+                    <InitiatePaymentButton
+                      dealId={id}
+                      amountCents={Math.round((d.total_value ?? 0) * 100)}
+                      label="Resume checkout"
+                    />
                   ) : (
                     <InitiatePaymentButton
                       dealId={id}
@@ -422,8 +446,8 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
                               Installment {n}
                             </p>
                             <p className="text-xs text-black/45 dark:text-white/40">
-                              {formatCurrency(amtCents / 100)} &nbsp;·&nbsp;
-                              Net: {formatCurrency((amtCents * 0.95) / 100)}
+                              {formatCents(amtCents)} &nbsp;·&nbsp;
+                              Net: {formatCents(Math.round(amtCents * 0.95))}
                             </p>
                           </div>
                           {paid ? (
@@ -431,7 +455,12 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
                               ✓ Paid
                             </span>
                           ) : inProgress ? (
-                            <span className="text-xs text-black/45 dark:text-white/40">In progress…</span>
+                            <InitiatePaymentButton
+                              dealId={id}
+                              amountCents={amtCents}
+                              installmentNumber={n}
+                              label="Resume checkout"
+                            />
                           ) : (
                             <InitiatePaymentButton
                               dealId={id}
@@ -472,11 +501,11 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
                           : "One-time payment"}
                       </p>
                       <p className="text-xs text-black/40 dark:text-white/35">
-                        {formatDate(p.paid_at)} · Net: {formatCurrency(p.net_cents / 100)}
+                        {formatDate(p.paid_at)} · Net: {formatCents(p.net_cents)}
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-black dark:text-white">
-                      {formatCurrency(p.amount_cents / 100)}
+                      {formatCents(p.amount_cents)}
                     </span>
                   </div>
                 ))}

@@ -110,7 +110,7 @@ export default async function TeamDealsPage() {
                   <Link
                     key={deal.id}
                     href={`/dashboard/team-dashboard/deals/${deal.id}`}
-                    className="flex items-center gap-4 rounded-2xl border border-black/6 bg-white px-5 py-4 shadow-sm transition-colors hover:bg-black/1 dark:border-white/6 dark:bg-[#161b27] dark:hover:bg-white/3"
+                    className="flex items-center gap-4 rounded-2xl border border-black/6 bg-white px-5 py-4 shadow-sm transition-colors hover:bg-black/2 dark:border-white/6 dark:bg-[#161b27] dark:hover:bg-white/3"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-black dark:text-white">{deal.title}</p>

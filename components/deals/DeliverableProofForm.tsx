@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useSubmitGuard } from "@/lib/ui/useSubmitGuard";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -37,7 +38,8 @@ export default function DeliverableProofForm({
   const [description, setDescription] = useState("");
   const [images, setImages] = useState<ImageFile[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const guard = useSubmitGuard();
+  const loading = guard.busy;
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
@@ -109,7 +111,7 @@ export default function DeliverableProofForm({
       return;
     }
 
-    setLoading(true);
+    if (!guard.begin()) return;
 
     try {
       // 1. Authorize and mint presigned URLs. Tiny JSON round-trip, no image bytes.
@@ -126,9 +128,7 @@ export default function DeliverableProofForm({
       );
       const presign = await presignRes.json().catch(() => ({}));
       if (!presignRes.ok) {
-        setError(
-          typeof presign.error === "string" ? presign.error : "Could not start the upload."
-        );
+        fail(typeof presign.error === "string" ? presign.error : "Could not start the upload.");
         return;
       }
 
@@ -143,7 +143,7 @@ export default function DeliverableProofForm({
       const uploads: { key: string; url: string; contentType: string }[] =
         presign.uploads ?? [];
       if (uploads.length !== images.length) {
-        setError("Could not start the upload. Please reload and try again.");
+        fail("Could not start the upload. Please reload and try again.");
         return;
       }
 
@@ -152,11 +152,21 @@ export default function DeliverableProofForm({
       const queue = uploads.map((u, i) => async () => {
         // Send ONLY Content-Type. Any additional header that was not part of the
         // signature makes S3 reject the PUT with 403 SignatureDoesNotMatch.
-        const putRes = await fetch(u.url, {
-          method: "PUT",
-          headers: { "Content-Type": u.contentType },
-          body: images[i].file,
-        });
+        let putRes: Response;
+        try {
+          putRes = await fetch(u.url, {
+            method: "PUT",
+            headers: { "Content-Type": u.contentType },
+            body: images[i].file,
+          });
+        } catch {
+          // A CORS rejection is indistinguishable from being offline — both surface as
+          // TypeError. But our own origin answered the presign request milliseconds ago, so
+          // connectivity is not the explanation: this is the bucket refusing the
+          // cross-origin PUT. Telling the athlete to "check your connection" would send
+          // them into an unwinnable retry loop over a server-side config fault.
+          throw new Error(navigator.onLine ? "s3_blocked" : "offline");
+        }
         if (!putRes.ok) throw new Error(`s3_put_${putRes.status}`);
         keys[i] = u.key;
         completed += 1;
@@ -187,23 +197,41 @@ export default function DeliverableProofForm({
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(
-          typeof data.error === "string" ? data.error : "Submission failed. Please try again."
-        );
+        fail(typeof data.error === "string" ? data.error : "Submission failed. Please try again.");
         return;
       }
+      guard.finish();
       router.push(successHref);
       router.refresh();
     } catch (err) {
-      setError(
-        err instanceof Error && err.message.startsWith("s3_put_")
-          ? "An image failed to upload. Check your connection and try again."
-          : "Network error - please try again."
-      );
-    } finally {
-      setLoading(false);
-      setUploadProgress(null);
+      // No `finally` here on purpose: re-enabling the button after a SUCCESSFUL submit
+      // re-arms it during the RSC transition, and a second submit makes the route's cleanup
+      // pass delete the first submission's S3 objects.
+      fail(uploadErrorMessage(err));
     }
+  }
+
+  /**
+   * Every abandoned-submit path goes through here. The guard is terminal by design, so an
+   * error branch that forgets to release() leaves the button dead until a reload.
+   */
+  function fail(message: string) {
+    setError(message);
+    guard.release();
+    setUploadProgress(null);
+  }
+
+  function uploadErrorMessage(err: unknown): string {
+    const code = err instanceof Error ? err.message : "";
+    if (code === "s3_blocked") {
+      return "The upload was blocked before it reached storage. This is a configuration problem on our side, not your connection — please contact support and mention code PROOF-CORS.";
+    }
+    if (code === "offline") return "You appear to be offline. Reconnect and try again.";
+    if (code === "s3_put_403") return "The upload link expired. Please try again.";
+    if (code.startsWith("s3_put_")) {
+      return "An image failed to upload. Check your connection and try again.";
+    }
+    return "Network error - please try again.";
   }
 
   /**
@@ -222,11 +250,10 @@ export default function DeliverableProofForm({
     );
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setError(
-        typeof data.error === "string" ? data.error : "Submission failed. Please try again."
-      );
+      fail(typeof data.error === "string" ? data.error : "Submission failed. Please try again.");
       return;
     }
+    guard.finish();
     router.push(successHref);
     router.refresh();
   }

@@ -88,6 +88,55 @@ export function deliverableCadenceLabel(frequency: DeliverableFrequency | string
   return DELIVERABLE_FREQUENCY_LABELS[f] ?? DELIVERABLE_FREQUENCY_LABELS.one_time;
 }
 
+/* ── Deliverable status ────────────────────────────────────────────────────────────
+ * Migration 017 renamed the initial status 'pending' -> 'not_started', changed the column
+ * DEFAULT and backfilled. But there is no CHECK constraint (005_partnerships.sql) and both
+ * insert paths kept writing the old literal, so live data holds BOTH values.
+ *
+ * Every predicate below therefore accepts both. That is the load-bearing property: it
+ * decouples the code deploy from the SQL apply, is correct on mixed rows, and survives a
+ * rollback in either direction. Do not "tidy" these into checking only 'not_started'.
+ */
+
+/** Collapses the legacy literal, and anything unrecognised, onto the current vocabulary. */
+export function normalizeDeliverableStatus(s: string | null | undefined): DeliverableStatus {
+  if (s === "submitted" || s === "approved" || s === "rejected") return s;
+  return "not_started"; // covers 'not_started', the legacy 'pending', null and junk
+}
+
+/**
+ * The statuses from which proof may be attached. Exported as an array so it can also be
+ * passed to a Postgres `.in()` filter — see the submit route, which uses it to make the
+ * status transition an atomic claim rather than a read-modify-write.
+ */
+export const AWAITING_SUBMISSION_STATUSES = ["not_started", "pending", "rejected"] as const;
+
+/** May the athlete/team attach proof? True before a submission, and after a rejection. */
+export function isAwaitingSubmission(s: string | null | undefined): boolean {
+  return (AWAITING_SUBMISSION_STATUSES as readonly string[]).includes(s ?? "");
+}
+
+/**
+ * Never submitted. Deliberately EXCLUDES 'rejected' — several surfaces count rejected
+ * separately as "needs your attention" rather than folding it into "not started".
+ */
+export function isNotStarted(s: string | null | undefined): boolean {
+  return s === "not_started" || s === "pending";
+}
+
+export const DELIVERABLE_STATUS_META: Record<DeliverableStatus, { label: string; cls: string }> = {
+  not_started: { label: "Not started", cls: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400" },
+  pending:     { label: "Not started", cls: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400" },
+  submitted:   { label: "Submitted",   cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400" },
+  approved:    { label: "Approved",    cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400" },
+  rejected:    { label: "Rejected",    cls: "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400" },
+};
+
+/** Always use this rather than indexing DELIVERABLE_STATUS_META — a raw lookup can miss. */
+export function deliverableStatusMeta(s: string | null | undefined): { label: string; cls: string } {
+  return DELIVERABLE_STATUS_META[normalizeDeliverableStatus(s)];
+}
+
 export const DEAL_STATUS_COLORS: Record<DealStatus, string> = {
   draft:     "bg-gray-100 text-gray-700 dark:bg-white/8 dark:text-white/50",
   pending:   "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400",
@@ -117,13 +166,31 @@ export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
   per_deliverable: "Per deliverable",
 };
 
+/**
+ * Money, shown to the precision it is actually charged at.
+ *
+ * `maximumFractionDigits: 0` used to round every amount to whole dollars while
+ * installmentAmountCents below deliberately produces cents — so a $1,000 deal over three
+ * months rendered "Pay $333" on a button that charged $333.33. Cents are shown only when
+ * they exist, so round figures stay readable as "$25,000".
+ *
+ * The null check is `== null`, not falsy: a real $0 must render "$0", not the "—" that
+ * means "no value". A deal awaiting its first payment is not a deal of unknown value.
+ */
 export function formatCurrency(v: number | null | undefined): string {
-  if (!v) return "—";
+  if (v == null || Number.isNaN(v)) return "—";
+  const hasCents = Math.round(v * 100) % 100 !== 0;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: hasCents ? 2 : 0,
   }).format(v);
+}
+
+/** Cents-native. Prefer over formatCurrency(x / 100) so the divide lives in one place. */
+export function formatCents(cents: number | null | undefined): string {
+  return cents == null || Number.isNaN(cents) ? "—" : formatCurrency(cents / 100);
 }
 
 /** Number of monthly installments for a deal based on its start/end dates. */

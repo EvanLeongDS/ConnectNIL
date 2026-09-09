@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSubmitGuard } from "@/lib/ui/useSubmitGuard";
 import {
   DEAL_CATEGORY_LABELS,
   PAYMENT_TYPE_LABELS,
@@ -66,7 +67,8 @@ export default function ProposeDealForm({ preselectedTeamId, preselectedTeamName
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const guard = useSubmitGuard();
+  const busy = guard.busy;
   const [availableTeams, setAvailableTeams] = useState<AvailableTeam[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(!preselectedTeamId);
 
@@ -181,7 +183,7 @@ export default function ProposeDealForm({ preselectedTeamId, preselectedTeamName
       setError(signErr);
       return;
     }
-    setBusy(true);
+    if (!guard.begin()) return;
     setError(null);
     try {
       const res = await fetch("/api/deals/propose", {
@@ -213,13 +215,17 @@ export default function ProposeDealForm({ preselectedTeamId, preselectedTeamName
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Something went wrong.");
+        guard.release();
         return;
       }
-      router.push("/dashboard/brand-dashboard/deals?sent=1");
+      // Terminal: no `finally` release. This handler creates a deal, so re-enabling the
+      // button during the RSC transition to the deals list would create a second one.
+      guard.finish();
+      const warn = data.participantInviteFailed ? "&warn=participants" : "";
+      router.push(`/dashboard/brand-dashboard/deals?sent=1${warn}`);
     } catch {
       setError("Network error. Please try again.");
-    } finally {
-      setBusy(false);
+      guard.release();
     }
   }
 

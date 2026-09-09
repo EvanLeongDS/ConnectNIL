@@ -277,7 +277,7 @@ export default function TeamRosterClient({
           >
             {sending ? "Creating…" : "Create invite links"}
           </button>
-          <p className="text-xs text-black/38 dark:text-white/30">
+          <p className="text-xs text-black/40 dark:text-white/30">
             Links stay valid until the athlete completes signup.
           </p>
 
@@ -332,7 +332,7 @@ export default function TeamRosterClient({
         {emails.length === 0 ? (
           <div className="py-12 text-center text-sm text-black/40 dark:text-white/35">Add emails to see invite status.</div>
         ) : (
-          <ul className="divide-y divide-black/4 dark:divide-white/4">
+          <ul className="divide-y divide-black/5 dark:divide-white/5">
             {emails.map((email, i) => {
               const { label, className } = statusFor(email, byEmail);
               const inv = byEmail.get(normalize(email));
@@ -351,7 +351,7 @@ export default function TeamRosterClient({
                       <button
                         type="button"
                         onClick={() => copyInviteUrl(inv.token)}
-                        className="rounded-full border border-[#1f7ae0]/40 bg-[#1f7ae0]/10 px-3 py-1 text-xs font-semibold text-[#1f7ae0] transition hover:bg-[#1f7ae0]/18 dark:text-[#5aa9f0]"
+                        className="rounded-full border border-[#1f7ae0]/40 bg-[#1f7ae0]/10 px-3 py-1 text-xs font-semibold text-[#1f7ae0] transition hover:bg-[#1f7ae0]/20 dark:text-[#5aa9f0]"
                       >
                         Copy link
                       </button>

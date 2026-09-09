@@ -6,29 +6,34 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import AuthNav from "@/components/auth/AuthNav";
 import AuthBackground from "@/components/auth/AuthBackground";
+import { useSubmitGuard } from "@/lib/ui/useSubmitGuard";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const guard = useSubmitGuard();
+  const loading = guard.busy;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    if (!guard.begin()) return;
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setError(error.message);
-      setLoading(false);
+      guard.release();
       return;
     }
 
-    setLoading(false);
+    // Terminal. setLoading(false) used to run BEFORE the push, so the button read "Sign In"
+    // and stayed clickable through the whole dashboard render — which is several sequential
+    // Supabase round trips. Users read that as a failed login and clicked again.
+    guard.finish();
     router.push("/dashboard");
     router.refresh();
   }

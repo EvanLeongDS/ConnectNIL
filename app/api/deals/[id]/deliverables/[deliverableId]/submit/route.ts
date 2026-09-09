@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { authorizeProofSubmission } from "@/lib/deals/deliverableAccess";
+import { AWAITING_SUBMISSION_STATUSES } from "@/lib/deals/types";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
   deleteProofObjects,
@@ -152,7 +153,14 @@ async function submitFromS3Keys(
     .filter((r): r is { kind: "s3"; key: string } => r.kind === "s3")
     .map((r) => r.key);
 
-  const { error: upErr } = await service
+  // The status transition IS the claim. Without the .in() filter this is a read-modify-write
+  // over `prev` above: two concurrent submits both read the old image set before either
+  // writes, so the loser's cleanup below deletes the winner's freshly-committed objects and
+  // their thumbnails. Filtering on the pre-submission statuses means the loser's UPDATE
+  // matches zero rows and never reaches that cleanup.
+  //
+  // A client-side guard cannot cover this — two browser tabs are two clients.
+  const { data: claimed, error: upErr } = await service
     .from("deliverables")
     .update({
       status: "submitted",
@@ -160,13 +168,27 @@ async function submitFromS3Keys(
       proof_image_urls: keys.map((k) => `${S3_REF_PREFIX}${k}`),
       submitted_at: new Date().toISOString(),
     })
-    .eq("id", deliverableId);
+    .eq("id", deliverableId)
+    .in("status", AWAITING_SUBMISSION_STATUSES)
+    .select("id")
+    .maybeSingle();
 
   if (upErr) {
     console.error("deliverable submit update:", upErr);
     // The DB write failed, so the objects we just verified are now orphans.
     await deleteProofObjects(keys);
     return NextResponse.json({ error: "Could not save submission." }, { status: 500 });
+  }
+
+  if (!claimed) {
+    // Someone else transitioned this deliverable between the access check and here. Drop
+    // only THIS request's uploads; the winner's objects are live and must not be touched,
+    // which is why the `dropped` cleanup below is unreachable from this branch.
+    await deleteProofObjects([...keys, ...keys.map(thumbKeyFor)]);
+    return NextResponse.json(
+      { error: "This deliverable cannot be submitted in its current state." },
+      { status: 409 }
+    );
   }
 
   // Only after the row is committed. Best-effort - never fails the response. Each dropped
@@ -263,7 +285,9 @@ async function submitFromMultipart(
     uploadedUrls.push(pub.publicUrl);
   }
 
-  const { error: upErr } = await service
+  // Same atomic claim as the S3 path above. This path has no cleanup pass to misfire, but a
+  // double submit would still overwrite the winner's description and image list.
+  const { data: claimed, error: upErr } = await service
     .from("deliverables")
     .update({
       status: "submitted",
@@ -271,11 +295,21 @@ async function submitFromMultipart(
       proof_image_urls: uploadedUrls,
       submitted_at: new Date().toISOString(),
     })
-    .eq("id", deliverableId);
+    .eq("id", deliverableId)
+    .in("status", AWAITING_SUBMISSION_STATUSES)
+    .select("id")
+    .maybeSingle();
 
   if (upErr) {
     console.error("deliverable submit update:", upErr);
     return NextResponse.json({ error: "Could not save submission." }, { status: 500 });
+  }
+
+  if (!claimed) {
+    return NextResponse.json(
+      { error: "This deliverable cannot be submitted in its current state." },
+      { status: 409 }
+    );
   }
 
   return NextResponse.json({ success: true, status: "submitted" });

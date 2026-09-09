@@ -70,6 +70,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Checked BEFORE the partnership insert, so an empty proposal fails without leaving a row
+  // behind. ProposeDealForm enforces this client-side too; this closes the API gap.
+  if (!deliverables?.some((d) => d.title?.trim())) {
+    return NextResponse.json({ error: "Add at least one deliverable." }, { status: 400 });
+  }
+
   const service = createServiceClient();
 
   const [{ data: brand }, { data: team }] = await Promise.all([
@@ -112,22 +118,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Could not create deal." }, { status: 500 });
   }
 
-  if (deliverables?.length) {
-    const rows = deliverables
-      .filter((d) => d.title?.trim())
-      .map((d) => ({
-        partnership_id: partnership.id,
-        title: d.title.trim(),
-        description: d.description?.trim() || null,
-        due_date: d.dueDate || null,
-        frequency: parseDeliverableFrequency(d.frequency),
-        status: "pending",
-      }));
-    if (rows.length > 0) {
-      const { error: dErr } = await service.from("deliverables").insert(rows);
-      if (dErr) console.error("insert deliverables:", dErr);
-    }
+  // A deal with no deliverables is not a deal — and the PATCH sibling
+  // (app/api/deals/[id]/route.ts) already refuses one, so accepting it here produced deals
+  // that could be proposed but never edited.
+  const deliverableRows = (deliverables ?? [])
+    .filter((d) => d.title?.trim())
+    .map((d) => ({
+      partnership_id: partnership.id,
+      title: d.title.trim(),
+      description: d.description?.trim() || null,
+      due_date: d.dueDate || null,
+      frequency: parseDeliverableFrequency(d.frequency),
+      // Migration 017's DEFAULT is already 'not_started'; this literal was overriding it
+      // and is why the legacy value kept appearing in rows created long after that ran.
+      status: "not_started",
+    }));
+
+  const { error: dErr } = await service.from("deliverables").insert(deliverableRows);
+  if (dErr) {
+    // This used to be logged and swallowed, so the brand saw "Deal proposal sent!" while the
+    // team manager opened a contract reading "No specific deliverables listed" — with no one
+    // notified. The insert is a single statement, so the only failure mode is "none landed";
+    // roll the partnership back rather than leaving a deal that means nothing.
+    // Safe to delete: participants are inserted below, after this point.
+    await service.from("partnerships").delete().eq("id", partnership.id);
+    console.error("propose deal: deliverables insert failed, rolled back partnership", partnership.id, dErr);
+    return NextResponse.json(
+      { error: "Could not save the deliverables, so the deal was not created. Please try again." },
+      { status: 500 }
+    );
   }
+
+  // Unlike the deliverables above, a participant failure must NOT roll the deal back:
+  // athletes on a team roster still reach the deal through team_athlete_invitations, so the
+  // deal is usable without these rows. It does need to be visible rather than silent.
+  let participantInviteFailed = false;
 
   const normEmail = (e: string) => e.trim().toLowerCase();
   const rosterEmails = Array.from(
@@ -148,10 +173,18 @@ export async function POST(request: NextRequest) {
           status: "invited" as const,
         }));
         const { error: partErr } = await service.from("partnership_participants").insert(participantRows);
-        if (partErr) console.error("insert partnership_participants:", partErr);
+        if (partErr) {
+          participantInviteFailed = true;
+          console.error(
+            "insert partnership_participants failed for partnership %s (athletes: %s):",
+            partnership.id,
+            athleteIds.join(", "),
+            partErr
+          );
+        }
       }
     }
   }
 
-  return NextResponse.json({ id: partnership.id });
+  return NextResponse.json({ id: partnership.id, participantInviteFailed });
 }

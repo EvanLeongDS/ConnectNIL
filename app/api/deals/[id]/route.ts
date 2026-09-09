@@ -154,7 +154,7 @@ export async function PATCH(
       description: d.description?.trim() || null,
       due_date: d.dueDate || null,
       frequency: parseDeliverableFrequency(d.frequency),
-      status: "pending" as const,
+      status: "not_started" as const,
     }));
 
   if (rows.length === 0) {

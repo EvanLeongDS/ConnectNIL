@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useSubmitGuard } from "@/lib/ui/useSubmitGuard";
+import { formatCents } from "@/lib/deals/types";
 
 interface Props {
   dealId: string;
@@ -19,17 +21,17 @@ export default function InitiatePaymentButton({
   deliverableId,
   disabled = false,
 }: Props) {
-  const [loading, setLoading] = useState(false);
+  const guard = useSubmitGuard();
+  const loading = guard.busy;
   const [error, setError] = useState<string | null>(null);
 
-  const dollars = (amountCents / 100).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+  // Was a local copy with maximumFractionDigits: 0, so a $333.33 installment offered a
+  // button reading "Pay $333" and then charged $333.33. Never round a figure the user is
+  // about to be charged.
+  const dollars = formatCents(amountCents);
 
   async function handlePay() {
-    setLoading(true);
+    if (!guard.begin()) return;
     setError(null);
     try {
       const res = await fetch(`/api/deals/${dealId}/pay`, {
@@ -43,15 +45,23 @@ export default function InitiatePaymentButton({
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Payment failed.");
+        guard.release();
         return;
       }
-      if (data.url) {
-        window.location.href = data.url;
+      if (!data.url) {
+        // A 200 with no URL used to leave the button reset and say nothing at all.
+        setError("Could not open the payment page. Please try again.");
+        guard.release();
+        return;
       }
+      // Terminal: the browser is navigating to Stripe. Releasing here — as the old
+      // `finally` did — flipped the button back to an enabled "Pay $X" mid-redirect, and a
+      // second click opens a second Checkout session for the same installment.
+      guard.finish();
+      window.location.href = data.url;
     } catch {
       setError("Network error — please try again.");
-    } finally {
-      setLoading(false);
+      guard.release();
     }
   }
 

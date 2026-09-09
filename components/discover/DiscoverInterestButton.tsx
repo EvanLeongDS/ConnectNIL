@@ -53,7 +53,7 @@ export default function DiscoverInterestButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-4 w-full rounded-xl border border-[#1f7ae0]/35 bg-[#1f7ae0]/10 py-2.5 text-sm font-semibold text-[#1f7ae0] transition hover:bg-[#1f7ae0]/18 dark:border-[#1f7ae0]/45 dark:bg-[#1f7ae0]/15 dark:text-[#8ec5ff] dark:hover:bg-[#1f7ae0]/25"
+        className="mt-4 w-full rounded-xl border border-[#1f7ae0]/35 bg-[#1f7ae0]/10 py-2.5 text-sm font-semibold text-[#1f7ae0] transition hover:bg-[#1f7ae0]/20 dark:border-[#1f7ae0]/45 dark:bg-[#1f7ae0]/15 dark:text-[#8ec5ff] dark:hover:bg-[#1f7ae0]/25"
       >
         Record interest
       </button>

@@ -6,6 +6,10 @@
   },
   "context": {
     "connectnil:region": "us-east-1",
-    "connectnil:secretParamName": "/connectnil/proof-pipeline-secret"
+    "connectnil:secretParamName": "/connectnil/proof-pipeline-secret",
+    "connectnil:bucketName": "connectnil-deliverable-proofs-532749776713-us-east-1-an",
+    "connectnil:callbackUrl": "https://connect-nil.vercel.app/api/internal/proof-processed",
+    "connectnil:vercelTeamSlug": "evanleongds-projects",
+    "connectnil:vercelProjectName": "connect-nil"
   }
 }

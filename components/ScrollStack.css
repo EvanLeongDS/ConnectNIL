@@ -1,13 +1,15 @@
 /* Sticky-based card stack: each card pins a little lower than the one before
-   it, so scrolling deals them into a deck. JS only handles scale + blur. */
+   it, so scrolling deals them into a deck. GSAP handles scale + blur. */
 
 .scroll-stack-item {
   position: sticky;
 }
 
+/* No filter transition here on purpose: GSAP writes scale and blur straight off
+   scroll position every frame, and its ScrollTrigger scrub already carries the
+   smoothing. A CSS transition would fight that and lag the deck behind. */
 .scroll-stack-card {
   transform-origin: 50% 0%;
-  transition: filter 0.15s linear;
   will-change: transform, filter;
 }
 

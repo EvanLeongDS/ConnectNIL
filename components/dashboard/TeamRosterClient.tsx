@@ -378,13 +378,8 @@ export default function TeamRosterClient({
         {displayEmails.length === 0 ? (
           <div className="py-12 text-center text-sm text-black/40 dark:text-white/35">Add emails to see invite status.</div>
         ) : (
-<<<<<<< Updated upstream
-          <ul className="divide-y divide-black/4 dark:divide-white/4">
-            {emails.map((email, i) => {
-=======
           <ul className="divide-y divide-black/5 dark:divide-white/5">
             {displayEmails.map((email) => {
->>>>>>> Stashed changes
               const { label, className } = statusFor(email, byEmail);
               const inv = byEmail.get(normalize(email));
               const canCopy = Boolean(inv?.token);

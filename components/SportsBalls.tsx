@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
 import { STAGE_COUNT, clamp01, lerp, smoothstep, stageScroll } from "./stageScroll";
 import "./SportsBalls.css";
 
@@ -1150,16 +1151,32 @@ export default function SportsBalls({ className = "" }: { className?: string }) 
 
   /* Pointer parallax, plus the scroll-driven formations. Both live in one frame
      loop: they write to the same elements, and splitting them would mean two
-     passes clobbering each other's transforms. */
+     passes clobbering each other's transforms.
+
+     That loop runs on gsap.ticker rather than a requestAnimationFrame of its
+     own. The hero's ScrollTrigger updates stageScroll.progress on GSAP's clock,
+     and this field reads it — on a separate loop the two would interleave
+     however the browser felt like scheduling them, so the balls would draw some
+     frames against a progress value from before the scrub had updated it and
+     some from after, which reads as the field jittering against the copy.
+     Appending to the same ticker puts them in a fixed order: ScrollTrigger
+     writes, then this reads, once per frame. It also means one clock to pause,
+     and GSAP's lag smoothing covers both. */
   useEffect(() => {
     const field = fieldRef.current;
     if (!field) return;
     if (reduced) return;
 
     const seats = Array.from(field.querySelectorAll<HTMLElement>(".sports-ball-seat"));
-    const target = { x: 0, y: 0 };
     const current = { x: 0, y: 0 };
-    let raf = 0;
+
+    /* quickTo instead of a hand-rolled lerp toward a target: pointermove fires
+       far more often than a frame, and this is the case it exists for — one
+       reused tween per axis, retargeted on the fly. The old `+= delta * 0.05`
+       was also frame-rate dependent, so the parallax eased faster on a 144Hz
+       screen than a 60Hz one; a duration doesn't have that problem. */
+    const toX = gsap.quickTo(current, "x", { duration: 0.75, ease: "power3" });
+    const toY = gsap.quickTo(current, "y", { duration: 0.75, ease: "power3" });
 
     let view = layout();
     // Last value written per seat, so the expensive properties are only touched
@@ -1188,18 +1205,17 @@ export default function SportsBalls({ className = "" }: { className?: string }) 
     let startedAt = -1;
 
     const onMove = (e: PointerEvent) => {
-      target.x = (e.clientX / window.innerWidth - 0.5) * -28;
-      target.y = (e.clientY / window.innerHeight - 0.5) * -28;
+      toX((e.clientX / window.innerWidth - 0.5) * -28);
+      toY((e.clientY / window.innerHeight - 0.5) * -28);
     };
 
     const onResize = () => {
       view = layout();
     };
 
-    const tick = (now: number) => {
-      current.x += (target.x - current.x) * 0.05;
-      current.y += (target.y - current.y) * 0.05;
-
+    /* `time` is seconds since GSAP's ticker started — the quickTo tweens above
+       have already advanced `current` for this frame by the time we're called. */
+    const tick = (time: number) => {
       /* The hero has unpinned and the page is moving again: the field goes up with
          it, one pixel per pixel, so the closed network scrolls away under the
          copy that built it instead of following the reader into the CTA below.
@@ -1219,10 +1235,7 @@ export default function SportsBalls({ className = "" }: { className?: string }) 
         lastGone = gone;
         field.style.visibility = gone ? "hidden" : "";
       }
-      if (gone) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
+      if (gone) return;
 
       field.style.transform = `translate3d(${current.x.toFixed(2)}px, ${(
         current.y - release
@@ -1242,8 +1255,8 @@ export default function SportsBalls({ className = "" }: { className?: string }) 
          along: the resting cloud's turn, which starts from a standstill because
          the field is on screen from the first frame, and the shapes' turn, which
          is at speed by the time anyone scrolls far enough to see it. */
-      if (startedAt < 0) startedAt = now;
-      const elapsed = (now - startedAt) / 1000;
+      if (startedAt < 0) startedAt = time;
+      const elapsed = time - startedAt;
       const cloud = turnAt(elapsed);
       const spin = NET_SPEED * elapsed;
 
@@ -1369,17 +1382,19 @@ export default function SportsBalls({ className = "" }: { className?: string }) 
       paint(meshRef, 0, mesh, SHELL_EDGES, 0);
       paint(gridRef, 1, grid, LATTICE_EDGES, TEAMS);
       paint(dealRef, 2, deal, DEAL_EDGES, 0);
-
-      raf = requestAnimationFrame(tick);
     };
 
     window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("resize", onResize);
-    raf = requestAnimationFrame(tick);
+    /* Appended, not prioritised: ScrollTrigger registers its own ticker
+       listener, and running after it is the whole point — see above. */
+    gsap.ticker.add(tick);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("resize", onResize);
-      cancelAnimationFrame(raf);
+      gsap.ticker.remove(tick);
+      toX.tween?.kill();
+      toY.tween?.kill();
       /* Hand the balls back to the stylesheet, or they'd freeze wherever the last
          frame left them — mid-turn, in the shading and stacking that went with it.
          Brands go back to being absent: with no loop running there is nothing to

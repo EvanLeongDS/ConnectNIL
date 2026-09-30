@@ -15,7 +15,8 @@ export default function ConnectNILLandingPage() {
             pushing the nav out of the way. */}
         <SiteNav overlay />
 
-        {/* ── Hero: four stages pinned in place, scrubbed by scroll ── */}
+        {/* ── Hero: pinned in place, scroll scrubs the four stages and the
+            ball formations that go with them ── */}
         <StageHero />
 
         {/* ── Closing CTA ── */}

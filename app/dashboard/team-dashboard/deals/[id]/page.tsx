@@ -67,9 +67,6 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
 
   const d = deal as DealRow;
 
-<<<<<<< Updated upstream
-  const { data: deliverableRows } = await supabase
-=======
   /* Athletes on this deal. resolveDealParticipants re-checks that this team owns the
      partnership before returning anyone. Service client is mandatory for the identity
      join — athlete_profiles RLS is self-only, so the manager's own client silently
@@ -82,13 +79,18 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
   const participantTotal = await countDealParticipants(service, id);
 
   const { data: deliverableRows, error: deliverablesError } = await supabase
->>>>>>> Stashed changes
     .from("deliverables")
     .select(
-      "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at"
+      "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at, proof_analysis, proof_review_flag"
     )
     .eq("partnership_id", id)
     .order("created_at");
+  if (deliverablesError) {
+    // Most likely migration 019 has not been applied yet. Left unlogged, this renders
+    // the deal with no deliverables at all, which reads as data loss rather than as a
+    // missing column.
+    console.error("deal detail: deliverables query failed:", deliverablesError);
+  }
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
 
   const proofHref = (deliverableId: string) =>
@@ -266,6 +268,7 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
                           <DeliverableProofView
                             description={del.proof_description}
                             imageUrls={del.proof_image_urls}
+                            analysis={del.proof_analysis}
                             className="mt-2"
                           />
                           {isActive && (del.status === "pending" || del.status === "rejected") && (

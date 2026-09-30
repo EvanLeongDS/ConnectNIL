@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ATHLETE_SPORTS, GRAD_YEARS, SCHOOL_BANNED } from "@/lib/profile/athleteConstants";
 import { profileInputClass } from "@/lib/profile/inputClass";
+import AthletePhotoPicker from "@/components/profile/AthletePhotoPicker";
 
 export type AthleteProfilePayload = {
   first_name: string;
@@ -22,6 +23,7 @@ export type AthleteProfilePayload = {
   tiktok_followers: number | null;
   twitter_followers: number | null;
   snapchat_followers: number | null;
+  photo_key: string | null;
 };
 
 function Field({
@@ -52,10 +54,13 @@ function followersString(n: number | null | undefined) {
 export default function AthleteProfileEditor({
   profile,
   redirectAfterSave,
+  photoUrl,
 }: {
   profile: AthleteProfilePayload;
   /** When set, navigate here after a successful save (e.g. back to read-only profile). */
   redirectAfterSave?: string;
+  /** Presigned URL for the CURRENT photo, resolved server-side. Null when there is none. */
+  photoUrl?: string | null;
 }) {
   const router = useRouter();
   const [firstName, setFirstName] = useState(profile.first_name);
@@ -74,6 +79,9 @@ export default function AthleteProfileEditor({
   const [tiktokFollowers, setTiktokFollowers] = useState(followersString(profile.tiktok_followers));
   const [twitterFollowers, setTwitterFollowers] = useState(followersString(profile.twitter_followers));
   const [snapchatFollowers, setSnapchatFollowers] = useState(followersString(profile.snapchat_followers));
+
+  const [photoKey, setPhotoKey] = useState<string | null>(profile.photo_key);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -115,6 +123,10 @@ export default function AthleteProfileEditor({
           tiktokFollowers: tiktokFollowers.trim() === "" ? null : tiktokFollowers,
           twitterFollowers: twitterFollowers.trim() === "" ? null : twitterFollowers,
           snapchatFollowers: snapchatFollowers.trim() === "" ? null : snapchatFollowers,
+          /* Always sent, so null means "remove my photo". The route distinguishes an absent
+             key (leave alone) from an explicit null, and this form always knows the
+             athlete's intent — so it always states it. */
+          photoKey,
         }),
       });
       const data = await res.json();
@@ -152,6 +164,18 @@ export default function AthleteProfileEditor({
           {message.text}
         </div>
       )}
+
+      <Field label="Profile photo">
+        <AthletePhotoPicker
+          value={photoKey}
+          savedUrl={photoUrl}
+          onChange={setPhotoKey}
+          onBusyChange={setPhotoUploading}
+          firstName={firstName}
+          lastName={lastName}
+          hint="This is how brands and your team manager see you."
+        />
+      </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="First name" required>
@@ -265,10 +289,12 @@ export default function AthleteProfileEditor({
 
       <button
         type="submit"
-        disabled={saving}
+        /* Also blocked mid-upload: saving then would PATCH the OLD key and strand the
+           object that is still being written. */
+        disabled={saving || photoUploading}
         className="rounded-full bg-[#1f7ae0] px-8 py-3 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
       >
-        {saving ? "Saving…" : "Save changes"}
+        {saving ? "Saving…" : photoUploading ? "Uploading photo…" : "Save changes"}
       </button>
     </form>
   );

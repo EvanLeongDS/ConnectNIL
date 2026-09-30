@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import ProfilePageActions from "@/components/profile/ProfilePageActions";
+import AthleteAvatar from "@/components/dashboard/AthleteAvatar";
+import { isS3Configured, presignAthletePhotoDownload } from "@/lib/aws/s3";
+import { normalizePhotoKey } from "@/lib/athletes/photo";
 
 export default async function AthleteProfilePage() {
   const supabase = await createClient();
@@ -16,10 +19,17 @@ export default async function AthleteProfilePage() {
     .maybeSingle();
   if (!profile) redirect("/onboarding/athlete");
 
+  /* Guarded: credentials() throws when S3 is unconfigured, and this renders mid-page. */
+  const photoKey = normalizePhotoKey(profile.photo_key);
+  const photoUrl =
+    photoKey && isS3Configured() ? await presignAthletePhotoDownload(photoKey) : null;
+
   const fields = [
     "first_name", "last_name", "phone", "school",
     "graduation_year", "sport", "team", "instagram_handle",
     "bio", "tiktok_handle", "twitter_handle", "snapchat_handle",
+    // Counted toward completion, so the bar rewards adding a photo.
+    "photo_key",
   ];
   const filled   = fields.filter((f) => !!(profile as Record<string, unknown>)[f]).length;
   const pct      = Math.round((filled / fields.length) * 100);
@@ -29,14 +39,22 @@ export default async function AthleteProfilePage() {
       <DashboardNav role="athlete" name={`${profile.first_name} ${profile.last_name}`} />
       <main className="mx-auto max-w-3xl px-6 py-10 md:px-10">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">Athlete Profile</p>
-            <h1 className="mt-1 text-3xl font-black tracking-tight text-black dark:text-white">
-              {profile.first_name} {profile.last_name}
-            </h1>
-            <p className="mt-1 text-sm text-black/45 dark:text-white/40">
-              {profile.team} · {profile.school}
-            </p>
+          <div className="flex items-center gap-4">
+            <AthleteAvatar
+              photoUrl={photoUrl}
+              firstName={profile.first_name}
+              lastName={profile.last_name}
+              size="xl"
+            />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">Athlete Profile</p>
+              <h1 className="mt-1 text-3xl font-black tracking-tight text-black dark:text-white">
+                {profile.first_name} {profile.last_name}
+              </h1>
+              <p className="mt-1 text-sm text-black/45 dark:text-white/40">
+                {profile.team} · {profile.school}
+              </p>
+            </div>
           </div>
           <ProfilePageActions editHref="/dashboard/athlete-dashboard/profile/edit" />
         </div>

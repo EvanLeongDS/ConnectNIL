@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { verifyAthletePhotoKey } from "@/lib/athletes/photoCommit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +15,21 @@ export async function POST(request: NextRequest) {
       twitter_handle, snapchat_handle,
       instagram_followers, tiktok_followers,
       twitter_followers, snapchat_followers,
+      photo_key,
     } = body;
+
+    /* The photo is optional, so an absent key is not an error — but a key that IS present
+       must survive the same three-stage check the profile editor applies (shape+ownership,
+       HeadObject, magic bytes). `user.id` comes from the verified session, never the body,
+       which is what stops one athlete claiming another's object. */
+    let photoKey: string | null = null;
+    if (typeof photo_key === "string" && photo_key) {
+      const verified = await verifyAthletePhotoKey(photo_key, user.id);
+      if (!verified.ok) {
+        return NextResponse.json({ error: verified.error }, { status: verified.status });
+      }
+      photoKey = verified.key;
+    }
 
     const parseFollowers = (v: unknown): number | null => {
       if (v === null || v === undefined || v === "") return null;
@@ -51,6 +66,7 @@ export async function POST(request: NextRequest) {
       tiktok_followers: parseFollowers(tiktok_followers),
       twitter_followers: parseFollowers(twitter_followers),
       snapchat_followers: parseFollowers(snapchat_followers),
+      photo_key: photoKey,
       onboarding_complete: true,
     });
 

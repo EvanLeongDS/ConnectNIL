@@ -1,9 +1,14 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import DealRespondButtons from "@/components/deals/DealRespondButtons";
 import DeliverableProofView from "@/components/deals/DeliverableProofView";
+import DealParticipantList from "@/components/deals/DealParticipantList";
+import {
+  countDealParticipants,
+  resolveDealParticipants,
+} from "@/lib/athletes/visibility";
 import {
   DealRow,
   DealPaymentRow,
@@ -62,7 +67,22 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
 
   const d = deal as DealRow;
 
+<<<<<<< Updated upstream
   const { data: deliverableRows } = await supabase
+=======
+  /* Athletes on this deal. resolveDealParticipants re-checks that this team owns the
+     partnership before returning anyone. Service client is mandatory for the identity
+     join — athlete_profiles RLS is self-only, so the manager's own client silently
+     returns nothing. */
+  const service = createServiceClient();
+  const participants = await resolveDealParticipants(service, id, {
+    id: user.id,
+    role: "team-manager",
+  });
+  const participantTotal = await countDealParticipants(service, id);
+
+  const { data: deliverableRows, error: deliverablesError } = await supabase
+>>>>>>> Stashed changes
     .from("deliverables")
     .select(
       "id, title, description, due_date, frequency, status, created_at, proof_description, proof_image_urls, submitted_at"
@@ -165,6 +185,22 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
                   v={DEAL_CATEGORY_LABELS[d.deal_type] ?? d.deal_type}
                 />
               )}
+
+              {/* Which of the manager's athletes are actually on this contract, and whether
+                  they have opted in. This page previously ran no participants query at all,
+                  so a manager signing a deal that requires athlete opt-in could not see who
+                  had agreed. Nested inside Parties rather than added as a numbered section,
+                  so the contract's 1-7 numbering is left alone. */}
+              <div className="mt-4 border-t border-black/5 pt-4 dark:border-white/5">
+                <p className="mb-3 text-xs font-semibold text-black/40 dark:text-white/35">
+                  Athletes on this deal
+                </p>
+                <DealParticipantList
+                  participants={participants}
+                  total={participantTotal}
+                  emptyHint="This deal is with the team as a whole — no individual athletes have been added."
+                />
+              </div>
             </ContractSection>
 
             {/* Term */}

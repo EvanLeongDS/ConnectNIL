@@ -18,10 +18,20 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
       <head>
-        {/* Prevent flash of wrong theme on load */}
+        {/*
+          * Resolve the theme before first paint, so there is no flash of the wrong one.
+          *
+          * The stored value is tri-state on purpose: 'dark' and 'light' are an explicit
+          * choice from the toggle, and ABSENT means "follow the OS". The old version
+          * wrote 'light' into localStorage the first time anyone loaded the site, which
+          * silently converted "no opinion" into "explicitly light" — so every visitor
+          * whose system (or dark-mode extension) is dark got a white app on their first
+          * visit and stayed on it forever, because the key was now set. Nothing here
+          * writes; only the toggle does.
+          */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');if(!t){localStorage.setItem('theme','light');}}}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');var d=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})()`,
           }}
         />
       </head>

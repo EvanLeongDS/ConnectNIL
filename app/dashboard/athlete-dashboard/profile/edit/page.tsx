@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import AthleteProfileEditor from "@/components/profile/AthleteProfileEditor";
+import { isS3Configured, presignAthletePhotoDownload } from "@/lib/aws/s3";
+import { normalizePhotoKey } from "@/lib/athletes/photo";
 
 const PROFILE_HREF = "/dashboard/athlete-dashboard/profile";
 
@@ -20,6 +22,14 @@ export default async function AthleteProfileEditPage() {
     .eq("id", user.id)
     .maybeSingle();
   if (!profile) redirect("/onboarding/athlete");
+
+  /* Presign the existing photo so the editor can show what is currently saved.
+     The isS3Configured() guard is not optional: credentials() THROWS when nothing resolves,
+     and this runs during page render — an unconfigured deployment would 500 the whole edit
+     page rather than just hiding the photo. */
+  const photoKey = normalizePhotoKey(profile.photo_key);
+  const photoUrl =
+    photoKey && isS3Configured() ? await presignAthletePhotoDownload(photoKey) : null;
 
   return (
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
@@ -39,7 +49,9 @@ export default async function AthleteProfileEditPage() {
 
         <AthleteProfileEditor
           redirectAfterSave={PROFILE_HREF}
+          photoUrl={photoUrl}
           profile={{
+            photo_key: photoKey,
             first_name: profile.first_name as string,
             last_name: profile.last_name as string,
             phone: profile.phone as string,

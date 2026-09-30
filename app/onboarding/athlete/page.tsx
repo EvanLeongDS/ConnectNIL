@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import AuthNav from "@/components/auth/AuthNav";
+import AthletePhotoPicker from "@/components/profile/AthletePhotoPicker";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -138,7 +139,19 @@ const BANNED_TERMS = [
 const currentYear = new Date().getFullYear();
 const GRAD_YEARS = Array.from({ length: 7 }, (_, i) => currentYear + i);
 
-const SECTIONS = ["About you", "School & sport", "Your pitch", "Social"];
+const SECTIONS = ["About you", "School & sport", "Photo", "Your pitch", "Social"];
+
+/**
+ * Derived, never written out as a literal. The step count used to appear as a bare `4` in
+ * five unrelated places — the progress bar, the submit/next branch, the back/continue
+ * branch, the validate-everything loop, and the last-step touched flag — none of them
+ * connected to SECTIONS. Inserting a step meant finding all five; missing one submitted the
+ * form on the wrong step or validated the wrong fields, with nothing to catch it at compile
+ * time. Adding a section here is now the whole change.
+ */
+const TOTAL_STEPS = SECTIONS.length;
+const STEP_PHOTO = SECTIONS.indexOf("Photo") + 1;
+const STEP_SOCIAL = SECTIONS.indexOf("Social") + 1;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -271,6 +284,11 @@ export default function AthleteOnboardingPage() {
   const [twFollowers, setTwFollowers] = useState("");
   const [scFollowers, setScFollowers] = useState("");
 
+  /** S3 object key returned by the picker. Written to the profile on final submit, not before. */
+  const [photoKey, setPhotoKey] = useState<string | null>(null);
+  /** Blocks Continue/Submit while an upload is in flight, so the key cannot be lost mid-save. */
+  const [photoUploading, setPhotoUploading] = useState(false);
+
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [schoolTouched, setSchoolTouched] = useState(false);
   const [igTouched, setIgTouched] = useState(false);
@@ -299,10 +317,13 @@ export default function AthleteOnboardingPage() {
       if (!sport) return "Please select a sport.";
       if (!team.trim()) return "Team name is required.";
     }
-    if (s === 3) {
+    if (s === STEP_PHOTO) {
+      // The photo is optional — an athlete who skips it renders as initials everywhere.
+      // Blocking signup on it would be a poor trade for a field they can add any time from
+      // the profile editor.
       return null;
     }
-    if (s === 4) {
+    if (s === STEP_SOCIAL) {
       if (!instagram.trim()) return "Instagram handle is required.";
     }
     return null;
@@ -329,13 +350,13 @@ export default function AthleteOnboardingPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setGlobalError(null);
-    for (let s = 1; s <= 4; s++) {
+    for (let s = 1; s <= TOTAL_STEPS; s++) {
       const err = validateStep(s);
       if (err) {
         setGlobalError(err);
         setStep(s);
         if (s === 2) setSchoolTouched(true);
-        if (s === 4) setIgTouched(true);
+        if (s === STEP_SOCIAL) setIgTouched(true);
         return;
       }
     }
@@ -363,6 +384,7 @@ export default function AthleteOnboardingPage() {
           tiktok_followers: ttFollowers ? parseInt(ttFollowers, 10) : null,
           twitter_followers: twFollowers ? parseInt(twFollowers, 10) : null,
           snapchat_followers: scFollowers ? parseInt(scFollowers, 10) : null,
+          photo_key: photoKey,
         }),
       });
 
@@ -395,10 +417,10 @@ export default function AthleteOnboardingPage() {
           </p>
         </div>
 
-        <ProgressBar current={step} total={4} labels={SECTIONS} />
+        <ProgressBar current={step} total={TOTAL_STEPS} labels={SECTIONS} />
 
         <form
-          onSubmit={step === 4 ? handleSubmit : (e) => { e.preventDefault(); handleNext(); }}
+          onSubmit={step === TOTAL_STEPS ? handleSubmit : (e) => { e.preventDefault(); handleNext(); }}
           className="space-y-8"
         >
           {step === 1 && (
@@ -555,7 +577,26 @@ export default function AthleteOnboardingPage() {
             </div>
           )}
 
-          {step === 3 && (
+          {step === STEP_PHOTO && (
+            <div className="space-y-5">
+              <SectionTitle
+                title="Add a photo"
+                subtitle="Optional — this is how brands and your team manager will recognise you."
+              />
+
+              <Field label="Profile photo" hint="You can change or remove this any time.">
+                <AthletePhotoPicker
+                  value={photoKey}
+                  onChange={setPhotoKey}
+                  onBusyChange={setPhotoUploading}
+                  firstName={firstName}
+                  lastName={lastName}
+                />
+              </Field>
+            </div>
+          )}
+
+          {step === 4 && (
             <div className="space-y-5">
               <SectionTitle
                 title="Your pitch to brands"
@@ -581,7 +622,7 @@ export default function AthleteOnboardingPage() {
             </div>
           )}
 
-          {step === 4 && (
+          {step === STEP_SOCIAL && (
             <div className="space-y-5">
               <SectionTitle
                 title="Social media"
@@ -750,10 +791,11 @@ export default function AthleteOnboardingPage() {
               </button>
             )}
 
-            {step < 4 ? (
+            {step < TOTAL_STEPS ? (
               <button
                 type="submit"
-                className="ml-auto rounded-full bg-[#1f7ae0] px-8 py-3 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02]"
+                disabled={photoUploading}
+                className="ml-auto rounded-full bg-[#1f7ae0] px-8 py-3 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
               >
                 Continue →
               </button>

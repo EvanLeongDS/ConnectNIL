@@ -2,28 +2,39 @@
 
 import { useEffect, useState } from "react";
 
+const MEDIA = "(prefers-color-scheme: dark)";
+
 export default function ThemeToggle() {
   const [dark, setDark] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Sync DOM + state from persisted preference.
-    const pref = localStorage.getItem("theme");
-    const isDark = pref === "dark";
-    document.documentElement.classList.toggle("dark", isDark);
-    setDark(isDark);
-    if (!pref) localStorage.setItem("theme", "light");
+    // Same tri-state rule as the pre-paint script in app/layout.tsx: an explicit
+    // 'dark'/'light' wins, and no stored value means we mirror the OS.
+    const mq = window.matchMedia(MEDIA);
+    const apply = () => {
+      const pref = localStorage.getItem("theme");
+      const isDark = pref === "dark" || (pref !== "light" && mq.matches);
+      document.documentElement.classList.toggle("dark", isDark);
+      setDark(isDark);
+    };
+    apply();
+
+    // Until the user picks a side we stay a live mirror of the system, so flipping the
+    // OS theme — or a dark-mode extension doing it for them — moves the app too,
+    // instead of stranding it on whatever it resolved to at load. Once they use the
+    // toggle, localStorage answers first and this listener stops mattering.
+    const onChange = () => {
+      if (!localStorage.getItem("theme")) apply();
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   function toggle() {
     const next = !dark;
     setDark(next);
-    if (next) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("theme", next ? "dark" : "light");
   }
 
   // Don't render until we know the real theme (avoids flicker)

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import AthleteAvatar from "@/components/dashboard/AthleteAvatar";
 
 export type InvitationRow = {
   email: string;
@@ -11,11 +12,29 @@ export type InvitationRow = {
   accepted_at: string | null;
 };
 
+/**
+ * A joined athlete's public-facing identity, resolved and authorized on the server by
+ * lib/athletes/visibility.ts#resolveTeamRoster. Never fetch athlete data from this
+ * component: athlete_profiles is readable only through the service client, which must stay
+ * on the server, and the team-scoping there is the authorization boundary.
+ */
+export type RosterMember = {
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  sport: string | null;
+  graduationYear: number | null;
+  /** Presigned and short-lived. Re-resolved whenever the server re-renders this page. */
+  photoUrl: string | null;
+};
+
 type Props = {
   initialEmails: string[];
   invitations: InvitationRow[];
   numPlayers: number;
   siteBaseUrl: string;
+  /** Keyed by lower-cased email. Absent for invites that are pending or not yet onboarded. */
+  membersByEmail: Record<string, RosterMember>;
 };
 
 function normalize(e: string) {
@@ -56,6 +75,7 @@ export default function TeamRosterClient({
   invitations,
   numPlayers,
   siteBaseUrl,
+  membersByEmail,
 }: Props) {
   const router = useRouter();
   const [emails, setEmails] = useState<string[]>(() =>
@@ -80,6 +100,32 @@ export default function TeamRosterClient({
     () => invitations.filter((i) => i.accepted_at).length,
     [invitations]
   );
+
+  /**
+   * The list the status table renders.
+   *
+   * NOT just `emails`. That state is seeded from team_profiles.athlete_emails, which
+   * POST /api/team/send-athlete-invites OVERWRITES wholesale with only the addresses in
+   * that request — while team_athlete_invitations rows are never deleted. So an athlete
+   * who accepted an invite and was later dropped from athlete_emails (by any save that
+   * happened not to include them) vanished from this table completely, roster spot and
+   * all, while still being on the team.
+   *
+   * Unioning in everyone who actually joined makes the table show the roster rather than
+   * the last thing typed into the invite box. `emails` itself is left alone: it is the
+   * editable draft that drives add/remove and the create-links call, and folding joined
+   * athletes into it would make "remove" look like it could un-join someone.
+   */
+  const displayEmails = useMemo(() => {
+    const joined = invitations.filter((i) => i.accepted_at).map((i) => normalize(i.email));
+    return Array.from(new Set([...emails, ...joined])).sort((a, b) => {
+      // Joined athletes first, then alphabetically — same ordering the server uses.
+      const aJoined = membersByEmail[a] ? 0 : 1;
+      const bJoined = membersByEmail[b] ? 0 : 1;
+      if (aJoined !== bJoined) return aJoined - bJoined;
+      return (membersByEmail[a]?.fullName || a).localeCompare(membersByEmail[b]?.fullName || b);
+    });
+  }, [emails, invitations, membersByEmail]);
 
   const pct = numPlayers > 0 ? Math.min(100, Math.round((acceptedCount / numPlayers) * 100)) : 0;
 
@@ -329,22 +375,47 @@ export default function TeamRosterClient({
             Status by athlete
           </h2>
         </div>
-        {emails.length === 0 ? (
+        {displayEmails.length === 0 ? (
           <div className="py-12 text-center text-sm text-black/40 dark:text-white/35">Add emails to see invite status.</div>
         ) : (
+<<<<<<< Updated upstream
           <ul className="divide-y divide-black/4 dark:divide-white/4">
             {emails.map((email, i) => {
+=======
+          <ul className="divide-y divide-black/5 dark:divide-white/5">
+            {displayEmails.map((email) => {
+>>>>>>> Stashed changes
               const { label, className } = statusFor(email, byEmail);
               const inv = byEmail.get(normalize(email));
               const canCopy = Boolean(inv?.token);
+              const member = membersByEmail[normalize(email)];
               return (
                 <li key={email} className="flex flex-wrap items-center gap-4 px-6 py-4 sm:flex-nowrap">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#dbeafe] text-sm font-bold text-[#1f7ae0]">
-                    {email[0].toUpperCase()}
-                  </div>
+                  {member ? (
+                    <AthleteAvatar
+                      photoUrl={member.photoUrl}
+                      firstName={member.firstName}
+                      lastName={member.lastName}
+                      size="md"
+                    />
+                  ) : (
+                    /* Still an email, not a person: invited but not joined, or joined but
+                       not yet onboarded. The initial of the address is all there is. */
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dbeafe] text-sm font-bold text-[#1f7ae0] dark:bg-[#1f7ae0]/20">
+                      {email[0].toUpperCase()}
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-black dark:text-white">{email}</p>
-                    <p className="text-xs text-black/35 dark:text-white/30">#{i + 1}</p>
+                    <p className="truncate text-sm font-medium text-black dark:text-white">
+                      {member ? member.fullName : email}
+                    </p>
+                    <p className="truncate text-xs text-black/35 dark:text-white/30">
+                      {member
+                        ? [member.sport, member.graduationYear ? `Class of ${member.graduationYear}` : null, email]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : "Not joined yet"}
+                    </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {canCopy && inv?.token && (

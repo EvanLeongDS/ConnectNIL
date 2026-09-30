@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { GRAD_YEARS, SCHOOL_BANNED } from "@/lib/profile/athleteConstants";
+import {
+  discardSupersededPhoto,
+  verifyAthletePhotoKey,
+} from "@/lib/athletes/photoCommit";
 
 function isValidPhone(val: string) {
   return /^[\d\s\-().+]{7,15}$/.test(val.trim());
@@ -74,9 +78,42 @@ export async function PATCH(request: NextRequest) {
 
   const bio = typeof body.bio === "string" ? body.bio.trim() || null : null;
 
+  /* Photo. Three distinct cases, which is why this tests for the KEY'S PRESENCE rather
+     than its truthiness:
+
+       photoKey absent      -> leave the existing photo alone
+       photoKey === null    -> the athlete removed their photo
+       photoKey === "<key>" -> a newly uploaded object to verify and adopt
+
+     Collapsing absent and null would make every save that happened not to include the
+     field silently delete the athlete's photo. */
+  const wantsPhotoChange = Object.prototype.hasOwnProperty.call(body, "photoKey");
+  let nextPhotoKey: string | null = null;
+  if (wantsPhotoChange && typeof body.photoKey === "string" && body.photoKey) {
+    const verified = await verifyAthletePhotoKey(body.photoKey, user.id);
+    if (!verified.ok) {
+      return NextResponse.json({ error: verified.error }, { status: verified.status });
+    }
+    nextPhotoKey = verified.key;
+  }
+
+  /* Read the outgoing key BEFORE the update so the old object can be cleaned up after.
+     Self-read is permitted by athlete_profiles' own RLS policy, so the cookie client is
+     enough — no service client needed here. */
+  let previousPhotoKey: string | null = null;
+  if (wantsPhotoChange) {
+    const { data: existing } = await supabase
+      .from("athlete_profiles")
+      .select("photo_key")
+      .eq("id", user.id)
+      .maybeSingle();
+    previousPhotoKey = (existing as { photo_key: string | null } | null)?.photo_key ?? null;
+  }
+
   const { error } = await supabase
     .from("athlete_profiles")
     .update({
+      ...(wantsPhotoChange ? { photo_key: nextPhotoKey } : {}),
       first_name: firstName,
       last_name: lastName,
       phone,
@@ -101,5 +138,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  /* Only after the new key is durably written. Best-effort and non-throwing: the athlete's
+     save has already succeeded, and a failed cleanup must not turn that into an error. */
+  if (wantsPhotoChange) {
+    await discardSupersededPhoto(previousPhotoKey, nextPhotoKey);
+  }
+
+  return NextResponse.json({ success: true, photoKey: nextPhotoKey });
 }

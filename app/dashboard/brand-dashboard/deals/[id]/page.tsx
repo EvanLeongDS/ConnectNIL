@@ -5,6 +5,11 @@ import DashboardNav from "@/components/dashboard/DashboardNav";
 import InitiatePaymentButton from "@/components/deals/InitiatePaymentButton";
 import { DeliverableReviewButtons } from "@/components/deals/DeliverableActions";
 import DeliverableProofView from "@/components/deals/DeliverableProofView";
+import DealParticipantList from "@/components/deals/DealParticipantList";
+import {
+  countDealParticipants,
+  resolveDealParticipants,
+} from "@/lib/athletes/visibility";
 import {
   DealRow,
   DeliverableRow,
@@ -82,6 +87,17 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
     .eq("partnership_id", id)
     .order("created_at");
   const payments = (paymentRows ?? []) as DealPaymentRow[];
+
+  /* Athletes on this deal. resolveDealParticipants re-reads the partnership and requires
+     this brand to own it before returning anyone — the check lives there rather than
+     relying on the `.eq("brand_id", user.id)` filter above, so the two cannot drift apart.
+     The service client is mandatory: athlete_profiles RLS is self-only, so the brand's own
+     client would return an empty list with no error. */
+  const participants = await resolveDealParticipants(service, id, {
+    id: user.id,
+    role: "brand-manager",
+  });
+  const participantTotal = await countDealParticipants(service, id);
 
   const name =
     profile.company_name || `${profile.first_name} ${profile.last_name}`.trim() || "Brand";
@@ -204,6 +220,16 @@ export default async function BrandDealDetailPage({ params, searchParams }: Prop
               <Row k="Team" v={d.team_display_name ?? "—"} />
               {d.season && <Row k="Season" v={d.season} />}
               {d.deal_type && <Row k="Category" v={DEAL_CATEGORY_LABELS[d.deal_type] ?? d.deal_type} />}
+            </Block>
+
+            {/* The athletes whose NIL this deal licenses. Until now a brand saw only the
+                team name here, so the people actually on the contract were invisible. */}
+            <Block label="Athletes">
+              <DealParticipantList
+                participants={participants}
+                total={participantTotal}
+                emptyHint="This deal is with the team as a whole — no individual athletes have been added."
+              />
             </Block>
 
             <Block label="Term">

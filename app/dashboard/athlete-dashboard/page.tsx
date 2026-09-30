@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
+import { isAwaitingSubmission } from "@/lib/deals/types";
 import {
   EmptyState,
   ListRow,
@@ -153,7 +154,7 @@ export default async function AthleteDashboard() {
     : { data: [] };
 
   const deliverables = (deliverableRows ?? []) as Deliverable[];
-  const notStartedDelivs = deliverables.filter((d) => d.status === "pending" || d.status === "rejected");
+  const notStartedDelivs = deliverables.filter((d) => isAwaitingSubmission(d.status));
   const inReviewDelivs = deliverables.filter((d) => d.status === "submitted");
   const openTasks = [...notStartedDelivs, ...inReviewDelivs];
 
@@ -187,7 +188,7 @@ export default async function AthleteDashboard() {
           meta={[profile.team, profile.school, profile.graduation_year ? `Class of ${profile.graduation_year}` : null]
             .filter(Boolean)
             .join(" · ")}
-          action={{ label: "Find brands", href: "/dashboard/athlete-dashboard/discover" }}
+          action={{ label: "Browse brands", href: "/dashboard/athlete-dashboard/discover" }}
         />
 
         {/* Action required — the one thing worth interrupting the layout for. */}
@@ -200,7 +201,11 @@ export default async function AthleteDashboard() {
               {teamOptInDeals.map((d) => d.title).join(" · ")}
             </p>
             <Link
-              href="/dashboard/athlete-dashboard/deals"
+              href={
+                teamOptInDeals.length === 1
+                  ? `/dashboard/athlete-dashboard/deals/${teamOptInDeals[0].id}`
+                  : "/dashboard/athlete-dashboard/deals"
+              }
               className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500"
             >
               Review
@@ -211,19 +216,22 @@ export default async function AthleteDashboard() {
         <StatRow>
           <StatCard
             label="Active deals"
+            href="/dashboard/athlete-dashboard/deals"
             value={String(allActiveDeals.length)}
             sub={allActiveDeals.length ? "In progress" : "None yet"}
             tone={allActiveDeals.length > 0 ? "accent" : undefined}
           />
           <StatCard
             label="Open tasks"
+            href="/dashboard/athlete-dashboard/deliverables"
             value={String(openTasks.length)}
             sub={openTasks.length ? "Need attention" : "All clear"}
             tone={notStartedDelivs.length > 0 ? "warn" : undefined}
           />
-          <StatCard label="Total earnings" value={formatCurrency(totalEarned)} sub="Across all deals" />
+          <StatCard label="Total earnings" value={formatCurrency(totalEarned)} sub="Across all deals" href="/dashboard/athlete-dashboard/deals" />
           <StatCard
             label="Profile"
+            href="/dashboard/athlete-dashboard/profile"
             value={`${completion}%`}
             sub={completion === 100 ? "All done!" : "Complete it to attract brands"}
             bar={completion}

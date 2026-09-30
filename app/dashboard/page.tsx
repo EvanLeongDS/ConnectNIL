@@ -46,5 +46,9 @@ export default async function DashboardRouter() {
   }
 
   // ── Unknown role fallback ─────────────────────────────────────────────────
-  redirect("/login");
+  // /role, never /login. Sending a signed-IN user to /login produced an infinite loop:
+  // the middleware bounces any authenticated user off an auth route straight back here.
+  // The middleware should now catch this case before the request ever reaches this page —
+  // this is defence in depth.
+  redirect("/role");
 }

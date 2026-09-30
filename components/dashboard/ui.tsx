@@ -17,6 +17,10 @@ export const dealTypeLabel: Record<string, string> = {
 };
 
 export const statusColor: Record<string, string> = {
+  // 'not_started' is the current initial deliverable status (migration 017); 'pending' is
+  // the legacy literal still present in live rows. ListRow looks these up bare with `?? ""`,
+  // so a missing key renders an unstyled pill rather than falling back to something sane.
+  not_started: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400",
   pending:   "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400",
   active:    "bg-green-50 text-green-700 dark:bg-green-900/25 dark:text-green-400",
   completed: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400",
@@ -26,19 +30,10 @@ export const statusColor: Record<string, string> = {
   rejected:  "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400",
 };
 
-export function formatCurrency(v: number | null | undefined) {
-  if (!v) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(v);
-}
-
-export function formatDate(d: string | null) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
+/* Re-exported, not reimplemented. These were duplicated here with `maximumFractionDigits: 0`
+   and a falsy null check, so the same amount could render differently depending on which
+   copy a page happened to import. lib/deals/types.ts is the single definition. */
+export { formatCurrency, formatCents, formatDate } from "@/lib/deals/types";
 
 /**
  * The Overview shell. Locks the page to one viewport on lg+ so nothing below the fold gets
@@ -87,23 +82,34 @@ export function StatRow({ children }: { children: React.ReactNode }) {
   return <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">{children}</div>;
 }
 
-/** `bar` (0-100) renders a progress track under the value — used for roster and profile completion. */
+/**
+ * `bar` (0-100) renders a progress track under the value — used for roster and profile
+ * completion. `href` makes the whole card a link.
+ *
+ * The href matters more than it looks: MagicBubbleShell paints a cursor-following glow on
+ * hover, so these cards were the only elements in the app that *looked* interactive, while
+ * the real links beside them got a flat tint. Every stat names a page that exists ("Open
+ * tasks" -> Deliverables, "Roster" -> Roster), so the affordance was simply pointing at the
+ * wrong thing.
+ */
 export function StatCard({
   label,
   value,
   sub,
   tone,
   bar,
+  href,
 }: {
   label: string;
   value: string;
   sub: string;
   tone?: "accent" | "warn";
   bar?: number;
+  href?: string;
 }) {
   const valueColor =
     tone === "accent" ? "text-[#1f7ae0]" : tone === "warn" ? "text-amber-500" : "text-black dark:text-white";
-  return (
+  const card = (
     <MagicBubbleShell className="rounded-2xl border border-black/6 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#161b27] dark:shadow-none">
       <p className="truncate text-[11px] font-medium text-black/40 dark:text-white/35">{label}</p>
       <p className={`mt-0.5 text-2xl font-black leading-tight tracking-tight ${valueColor}`}>{value}</p>
@@ -118,6 +124,14 @@ export function StatCard({
         </>
       )}
     </MagicBubbleShell>
+  );
+
+  return href ? (
+    <Link href={href} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1f7ae0]/40">
+      {card}
+    </Link>
+  ) : (
+    card
   );
 }
 

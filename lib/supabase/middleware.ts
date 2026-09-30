@@ -83,10 +83,31 @@ export async function updateSession(request: NextRequest) {
     const isProtectedRoute =
       pathname.startsWith("/dashboard") || pathname.startsWith("/onboarding");
 
+    /* An account whose user_metadata.role is missing, empty or unrecognised. This is a real
+     * state, not a theoretical one: /signup used to read the role from a query param and
+     * store "" when it was absent, and users created straight from the Supabase dashboard
+     * have no role at all.
+     *
+     * Such a user used to be unrecoverable. /dashboard sent them to /login, the block below
+     * sent them from /login back to /dashboard, and the browser gave up with
+     * ERR_TOO_MANY_REDIRECTS — and because /role is itself an auth route, the one page that
+     * could have fixed the account bounced too. Signing out was the only escape. */
+    const VALID_ROLES = new Set(["athlete", "brand-manager", "team-manager"]);
+    const role = user?.user_metadata?.role as string | undefined;
+    const needsRole = Boolean(user) && !VALID_ROLES.has(role ?? "");
+
     // Not logged in → push to login
     if (!user && isProtectedRoute) {
       const nextUrl = request.nextUrl.clone();
       nextUrl.pathname = "/login";
+      return NextResponse.redirect(nextUrl);
+    }
+
+    // Role-less → the role picker is the only useful destination, and it must stay reachable.
+    if (needsRole && isProtectedRoute) {
+      const nextUrl = request.nextUrl.clone();
+      nextUrl.pathname = "/role";
+      nextUrl.search = "";
       return NextResponse.redirect(nextUrl);
     }
 
@@ -98,7 +119,11 @@ export async function updateSession(request: NextRequest) {
       const hasTeamInvite =
         pathname.startsWith("/signup/athlete") &&
         Boolean(request.nextUrl.searchParams.get("invite")?.trim());
-      if (!hasTeamInvite) {
+      // A role-less user on /role is the one case where an authenticated visitor genuinely
+      // belongs on an auth route — it is where they go to become recoverable. Bouncing them
+      // to /dashboard is the second half of the redirect loop described above.
+      const fixingRole = needsRole && pathname.startsWith("/role");
+      if (!hasTeamInvite && !fixingRole) {
         const nextUrl = request.nextUrl.clone();
         nextUrl.pathname = "/dashboard";
         return NextResponse.redirect(nextUrl);
@@ -107,8 +132,6 @@ export async function updateSession(request: NextRequest) {
 
     // Logged in — enforce that each dashboard sub-route matches the user's role
     if (user && pathname.startsWith("/dashboard/")) {
-      const role = user.user_metadata?.role as string | undefined;
-
       const roleMap: Record<string, string> = {
         athlete: "/dashboard/athlete-dashboard",
         "brand-manager": "/dashboard/brand-dashboard",
@@ -120,6 +143,16 @@ export async function updateSession(request: NextRequest) {
       // If they hit a role-specific sub-path that isn't theirs, send to router
       const rolePaths = Object.values(roleMap);
       const isRoleSubPath = rolePaths.some((p) => pathname.startsWith(p));
+
+      // An unknown role left allowedPath undefined, which made the guard below fall through
+      // and skip role enforcement ENTIRELY — so the users with no valid role were the only
+      // ones who could open any role's dashboard. Handle them first.
+      if (isRoleSubPath && !allowedPath) {
+        const nextUrl = request.nextUrl.clone();
+        nextUrl.pathname = "/role";
+        nextUrl.search = "";
+        return NextResponse.redirect(nextUrl);
+      }
 
       if (isRoleSubPath && allowedPath && !pathname.startsWith(allowedPath)) {
         const nextUrl = request.nextUrl.clone();

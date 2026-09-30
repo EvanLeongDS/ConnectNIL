@@ -1,4 +1,5 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { isAwaitingSubmission } from "@/lib/deals/types";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -102,7 +103,7 @@ export async function authorizeProofSubmission(
     .maybeSingle();
 
   if (!deliverable) return { ok: false, status: 404, error: "Deliverable not found." };
-  if (deliverable.status !== "pending" && deliverable.status !== "rejected") {
+  if (!isAwaitingSubmission(deliverable.status)) {
     return {
       ok: false,
       status: 409,

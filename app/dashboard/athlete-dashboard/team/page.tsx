@@ -3,11 +3,13 @@ import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import {
+  deliverableStatusMeta,
   DEAL_STATUS_COLORS,
   DEAL_CATEGORY_LABELS,
   DELIVERABLE_FREQUENCY_LABELS,
   formatCurrency,
   formatDate,
+  isNotStarted,
 } from "@/lib/deals/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -280,8 +282,10 @@ export default async function AthleteTeamPage() {
             const myDelivs = deals.flatMap(
               (d) => deliverablesByDeal.get(d.id) ?? []
             );
+            // Deliberately excludes 'rejected', as it always has — this counter is "work
+            // outstanding or awaiting review", and a rejection is surfaced separately.
             const pendingDelivs = myDelivs.filter(
-              (d) => d.status === "pending" || d.status === "submitted"
+              (d) => isNotStarted(d.status) || d.status === "submitted"
             );
 
             return (
@@ -523,25 +527,13 @@ function EmptyState({
   );
 }
 
-const DELIVERABLE_STATUS_STYLES: Record<string, string> = {
-  pending:
-    "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400",
-  submitted:
-    "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400",
-  approved:
-    "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400",
-  rejected:
-    "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400",
-};
-
 function DeliverableStatusBadge({ status }: { status: string }) {
+  // Was a local style map plus `status.charAt(0).toUpperCase() + status.slice(1)`, which
+  // rendered the current initial status as the literal "Not_started".
+  const meta = deliverableStatusMeta(status);
   return (
-    <span
-      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
-        DELIVERABLE_STATUS_STYLES[status] ?? "bg-black/8 text-black/50 dark:bg-white/8 dark:text-white/45"
-      }`}
-    >
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${meta.cls}`}>
+      {meta.label}
     </span>
   );
 }

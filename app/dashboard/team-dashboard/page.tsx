@@ -101,23 +101,26 @@ export default async function TeamDashboard() {
         <StatRow>
           <StatCard
             label="Active deals"
+            href="/dashboard/team-dashboard/deals"
             value={String(activeDeals.length)}
             sub={activeDeals.length ? "In progress" : "None yet"}
             tone={activeDeals.length > 0 ? "accent" : undefined}
           />
           <StatCard
             label="Awaiting review"
+            href="/dashboard/team-dashboard/deals"
             value={String(pendingDeals.length)}
             sub={pendingDeals.length ? "Needs your decision" : "All clear"}
             tone={pendingDeals.length > 0 ? "warn" : undefined}
           />
           <StatCard
             label="Roster invited"
+            href="/dashboard/team-dashboard/roster"
             value={`${invitesSent}/${profile.num_players}`}
             sub={`${rosterPct}% coverage`}
             bar={rosterPct}
           />
-          <StatCard label="Total earned" value={formatCurrency(totalEarned)} sub="Completed deals" />
+          <StatCard label="Total earned" value={formatCurrency(totalEarned)} sub="Completed deals" href="/dashboard/team-dashboard/deals" />
         </StatRow>
 
         <PanelRow>
@@ -148,7 +151,7 @@ export default async function TeamDashboard() {
             )}
           </Panel>
 
-          <Panel title="Needs your review" action={{ label: "Opportunities", href: "/dashboard/team-dashboard/opportunities" }}>
+          <Panel title="Needs your review" action={{ label: "All deals", href: "/dashboard/team-dashboard/deals" }}>
             {pendingDeals.length === 0 ? (
               <EmptyState icon="✅" text="Nothing waiting on you." sub="New brand proposals will land here." />
             ) : (

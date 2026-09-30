@@ -93,12 +93,13 @@ export default async function BrandDashboard() {
           meta={[profile.industry, [profile.city, profile.state].filter(Boolean).join(", ")]
             .filter(Boolean)
             .join(" · ")}
-          action={{ label: "Find athletes", href: "/dashboard/brand-dashboard/discover" }}
+          action={{ label: "Find teams", href: "/dashboard/brand-dashboard/discover" }}
         />
 
         <StatRow>
           <StatCard
             label="Active campaigns"
+            href="/dashboard/brand-dashboard/deals"
             value={String(activeDeals.length)}
             sub={activeDeals.length ? "In progress" : "None yet"}
             tone={activeDeals.length > 0 ? "accent" : undefined}
@@ -108,8 +109,8 @@ export default async function BrandDashboard() {
             value={String(uniqueAthletes + uniqueTeams)}
             sub={`${uniqueAthletes} athletes · ${uniqueTeams} teams`}
           />
-          <StatCard label="Active spend" value={formatCurrency(activeSpend)} sub="Across active deals" />
-          <StatCard label="Total spent" value={formatCurrency(totalSpent)} sub="Completed deals" />
+          <StatCard label="Active spend" value={formatCurrency(activeSpend)} sub="Across active deals" href="/dashboard/brand-dashboard/deals" />
+          <StatCard label="Total spent" value={formatCurrency(totalSpent)} sub="Completed deals" href="/dashboard/brand-dashboard/deals" />
         </StatRow>
 
         <PanelRow>
@@ -147,7 +148,7 @@ export default async function BrandDashboard() {
 
           <Panel
             title="Awaiting response"
-            action={{ label: "Opportunities", href: "/dashboard/brand-dashboard/opportunities" }}
+            action={{ label: "All deals", href: "/dashboard/brand-dashboard/deals" }}
           >
             {pendingDeals.length === 0 ? (
               <EmptyState icon="📨" text="No proposals out." sub="Offers you send appear here until answered." />

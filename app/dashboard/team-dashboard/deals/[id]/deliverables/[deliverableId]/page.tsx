@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import DeliverableProofForm from "@/components/deals/DeliverableProofForm";
 import type { DealRow } from "@/lib/deals/types";
+import { isAwaitingSubmission } from "@/lib/deals/types";
 
 interface Props {
   params: Promise<{ id: string; deliverableId: string }>;
@@ -46,7 +47,7 @@ export default async function TeamDeliverableProofPage({ params }: Props) {
     .maybeSingle();
 
   if (!row) notFound();
-  if (row.status !== "pending" && row.status !== "rejected") {
+  if (!isAwaitingSubmission(row.status)) {
     redirect(`/dashboard/team-dashboard/deals/${dealId}`);
   }
 

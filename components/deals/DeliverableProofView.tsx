@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { parseProofImageRefs } from "@/lib/deals/deliverableProof";
 import { parseProofAnalysis, proofReviewFlag } from "@/lib/deals/proofAnalysis";
-import { presignProofDownload } from "@/lib/aws/s3";
+import { isS3Configured, presignProofDownload } from "@/lib/aws/s3";
 
 interface Props {
   description?: string | null;
@@ -39,9 +39,17 @@ export default async function DeliverableProofView({
   const s3Keys = refs.filter((r) => r.kind === "s3").map((r) => (r as { key: string }).key);
   const flag = proofReviewFlag(parsed, s3Keys);
 
+  // Presigning throws when no S3 credentials resolve, and this is a server component
+  // rendered mid-page by all three deal-detail routes — so an unguarded call takes the whole
+  // page down with Next's bare error screen, not a broken thumbnail. That is reachable
+  // through the documented rollback: unset AWS_ROLE_ARN / S3_* and every deal carrying an
+  // S3-era proof 500s. Legacy Supabase refs need no credentials and must keep rendering.
+  const s3Available = isS3Configured();
+
   const items = await Promise.all(
     refs.map(async (r) => {
       if (r.kind === "url") return { full: r.url, thumb: r.url, flagged: false };
+      if (!s3Available) return null;
       const entry = parsed[r.key];
       const full = await presignProofDownload(r.key);
       return {
@@ -50,7 +58,9 @@ export default async function DeliverableProofView({
         flagged: Boolean(entry?.moderation.flagged),
       };
     })
-  );
+  ).then((rows) => rows.filter((row): row is NonNullable<typeof row> => row !== null));
+
+  const hiddenS3Count = s3Available ? 0 : s3Keys.length;
 
   const mentioned = s3Keys.some((k) => parsed[k]?.brandMention.matched);
   const matchedOn = [...new Set(s3Keys.flatMap((k) => parsed[k]?.brandMention.matchedOn ?? []))];
@@ -83,6 +93,14 @@ export default async function DeliverableProofView({
               <Badge tone="warn">No brand mention detected</Badge>
             ))}
         </div>
+      )}
+
+      {hiddenS3Count > 0 && (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/50 dark:bg-amber-900/20 dark:text-amber-200">
+          {hiddenS3Count === 1 ? "1 proof image is" : `${hiddenS3Count} proof images are`} stored
+          in S3 and cannot be displayed right now — image storage is not configured on this
+          deployment. The {hiddenS3Count === 1 ? "image has" : "images have"} not been lost.
+        </p>
       )}
 
       {items.length > 0 && (

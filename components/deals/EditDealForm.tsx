@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSubmitGuard } from "@/lib/ui/useSubmitGuard";
 import { DELIVERABLE_FREQUENCY_LABELS, type DeliverableFrequency, formatDate } from "@/lib/deals/types";
 import {
   SEASONS,
@@ -58,7 +59,8 @@ function normalizeFrequency(f: string | null | undefined): DeliverableFrequency 
 export default function EditDealForm({ dealId, teamDisplayName, initial, initialDeliverables }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const guard = useSubmitGuard();
+  const busy = guard.busy;
 
   const [title, setTitle] = useState(initial.title);
   const [description, setDescription] = useState(initial.description);
@@ -144,7 +146,7 @@ export default function EditDealForm({ dealId, teamDisplayName, initial, initial
       setError(err);
       return;
     }
-    setBusy(true);
+    if (!guard.begin()) return;
     setError(null);
     try {
       const res = await fetch(`/api/deals/${dealId}`, {
@@ -175,14 +177,17 @@ export default function EditDealForm({ dealId, teamDisplayName, initial, initial
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Something went wrong.");
+        guard.release();
         return;
       }
+      // Terminal: this handler deletes and reinserts the deal's deliverables, so a second
+      // run during the RSC transition would redo that whole swap.
+      guard.finish();
       router.push(`/dashboard/brand-dashboard/deals/${dealId}?updated=1`);
       router.refresh();
     } catch {
       setError("Network error. Please try again.");
-    } finally {
-      setBusy(false);
+      guard.release();
     }
   }
 

@@ -1,6 +1,15 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
+import Link from "next/link";
+import {
+  DEAL_CATEGORY_LABELS,
+  DEAL_STATUS_COLORS,
+  DEAL_STATUS_LABELS,
+  formatCurrency,
+  formatDate,
+  type DealStatus,
+} from "@/lib/deals/types";
 
 interface Partnership {
   id: string;
@@ -14,28 +23,6 @@ interface Partnership {
   team_id: string | null;
 }
 
-const dealTypeLabel: Record<string, string> = {
-  social_media: "Social Media",
-  in_person: "In-Person",
-  content_creation: "Content Creation",
-};
-
-const statusColor: Record<string, string> = {
-  pending:   "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400",
-  active:    "bg-green-50 text-green-700 dark:bg-green-900/25 dark:text-green-400",
-  completed: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400",
-  cancelled: "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400",
-};
-
-function formatCurrency(v: number | null) {
-  if (!v) return "—";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
-}
-
-function formatDate(d: string | null) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 export default async function BrandCampaignsPage() {
   const supabase = await createClient();
@@ -105,15 +92,19 @@ export default async function BrandCampaignsPage() {
           return (
             <section key={status} className="mb-8">
               <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-black/35 dark:text-white/30">
-                {status}
+                {DEAL_STATUS_LABELS[status as DealStatus] ?? status}
               </h2>
               <div className="space-y-3">
                 {group.map((deal) => (
-                  <div key={deal.id} className="flex items-center gap-4 rounded-2xl border border-black/6 bg-white px-5 py-4 shadow-sm dark:border-white/6 dark:bg-[#161b27]">
+                  <Link
+                    key={deal.id}
+                    href={`/dashboard/brand-dashboard/deals/${deal.id}`}
+                    className="flex items-center gap-4 rounded-2xl border border-black/6 bg-white px-5 py-4 shadow-sm transition hover:border-black/12 hover:bg-black/2 dark:border-white/6 dark:bg-[#161b27] dark:hover:border-white/12 dark:hover:bg-white/3"
+                  >
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-black dark:text-white">{deal.title}</p>
                       <p className="mt-0.5 text-sm text-black/40 dark:text-white/35">
-                        {(deal.deal_type && (dealTypeLabel[deal.deal_type] ?? deal.deal_type)) || "Deal"}
+                        {(deal.deal_type && (DEAL_CATEGORY_LABELS[deal.deal_type] ?? deal.deal_type)) || "Deal"}
                         {deal.team_id    && " · Team deal"}
                         {deal.athlete_id && !deal.team_id && " · Athlete deal"}
                         {deal.start_date && ` · ${formatDate(deal.start_date)}`}
@@ -124,11 +115,11 @@ export default async function BrandCampaignsPage() {
                       <span className="text-sm font-semibold text-black dark:text-white">
                         {formatCurrency(deal.total_value)}
                       </span>
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor[status]}`}>
-                        {status}
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${DEAL_STATUS_COLORS[status as DealStatus] ?? ""}`}>
+                        {DEAL_STATUS_LABELS[status as DealStatus] ?? status}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </section>

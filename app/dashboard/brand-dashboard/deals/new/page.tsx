@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import DashboardNav from "@/components/dashboard/DashboardNav";
 import ProposeDealForm from "@/components/deals/ProposeDealForm";
+import Link from "next/link";
 
 interface Props {
   searchParams: Promise<{ teamId?: string; teamName?: string }>;
@@ -37,6 +38,19 @@ export default async function NewDealPage({ searchParams }: Props) {
     <div className="min-h-screen bg-[#f9fafb] dark:bg-[#0d1117]">
       <DashboardNav role="brand-manager" name={name} />
       <main className="mx-auto max-w-2xl px-6 py-10 md:px-10">
+        {/* The wizard's own footer only shows "Back" from step 2 onward, so step 1 had no
+            exit at all except the top nav. */}
+        <div className="mb-6 flex items-center gap-2 text-sm">
+          <Link
+            href="/dashboard/brand-dashboard/deals"
+            className="text-black/40 hover:text-black dark:text-white/35 dark:hover:text-white"
+          >
+            Deals
+          </Link>
+          <span className="text-black/25 dark:text-white/20">/</span>
+          <span className="text-black/60 dark:text-white/50">New proposal</span>
+        </div>
+
         <div className="mb-8">
           <p className="text-xs font-semibold uppercase tracking-widest text-[#1f7ae0]">
             Brand Deals

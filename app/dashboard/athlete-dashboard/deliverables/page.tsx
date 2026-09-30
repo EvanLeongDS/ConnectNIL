@@ -5,15 +5,11 @@ import DashboardNav from "@/components/dashboard/DashboardNav";
 import {
   DELIVERABLE_FREQUENCY_LABELS,
   DeliverableFrequency,
+  deliverableStatusMeta,
   formatDate,
+  isAwaitingSubmission,
+  isNotStarted,
 } from "@/lib/deals/types";
-
-const STATUS_STYLES: Record<string, { label: string; cls: string }> = {
-  pending:   { label: "Pending",   cls: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400" },
-  submitted: { label: "Submitted", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400" },
-  approved:  { label: "Approved",  cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400" },
-  rejected:  { label: "Rejected",  cls: "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400" },
-};
 
 function normalizeFrequency(f: string | null | undefined): DeliverableFrequency {
   if (f === "daily" || f === "weekly" || f === "monthly" || f === "season" || f === "one_time") return f;
@@ -114,10 +110,10 @@ export default async function AthleteDeliverablesPage() {
 
   const deliverables = (deliverableRows ?? []) as DeliverableRow[];
 
-  const pending   = deliverables.filter((d) => d.status === "pending");
-  const submitted = deliverables.filter((d) => d.status === "submitted");
-  const approved  = deliverables.filter((d) => d.status === "approved");
-  const rejected  = deliverables.filter((d) => d.status === "rejected");
+  const notStarted = deliverables.filter((d) => isNotStarted(d.status));
+  const submitted  = deliverables.filter((d) => d.status === "submitted");
+  const approved   = deliverables.filter((d) => d.status === "approved");
+  const rejected   = deliverables.filter((d) => d.status === "rejected");
 
   const athleteName = `${profile.first_name} ${profile.last_name}`.trim();
 
@@ -141,10 +137,10 @@ export default async function AthleteDeliverablesPage() {
         {/* Summary stats */}
         <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[
-            { label: "Pending",   value: pending.length,   cls: "text-yellow-600 dark:text-yellow-400" },
-            { label: "Submitted", value: submitted.length, cls: "text-blue-600 dark:text-blue-400" },
-            { label: "Approved",  value: approved.length,  cls: "text-emerald-600 dark:text-emerald-400" },
-            { label: "Rejected",  value: rejected.length,  cls: "text-red-600 dark:text-red-400" },
+            { label: "Not started", value: notStarted.length, cls: "text-yellow-600 dark:text-yellow-400" },
+            { label: "Submitted",   value: submitted.length,  cls: "text-blue-600 dark:text-blue-400" },
+            { label: "Approved",    value: approved.length,   cls: "text-emerald-600 dark:text-emerald-400" },
+            { label: "Rejected",    value: rejected.length,   cls: "text-red-600 dark:text-red-400" },
           ].map(({ label, value, cls }) => (
             <div key={label} className="rounded-2xl border border-black/6 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#161b27]">
               <p className="text-xs text-black/40 dark:text-white/35">{label}</p>
@@ -164,7 +160,7 @@ export default async function AthleteDeliverablesPage() {
         ) : (
           <div className="space-y-6">
             {[
-              { title: "Action Required", items: [...rejected, ...pending], actionable: true },
+              { title: "Action Required", items: [...rejected, ...notStarted], actionable: true },
               { title: "Submitted — Awaiting Review", items: submitted, actionable: false },
               { title: "Approved", items: approved, actionable: false },
             ]
@@ -178,9 +174,9 @@ export default async function AthleteDeliverablesPage() {
                     <div className="divide-y divide-black/5 dark:divide-white/5">
                       {items.map((del) => {
                         const freq = normalizeFrequency(del.frequency);
-                        const statusInfo = STATUS_STYLES[del.status] ?? STATUS_STYLES.pending;
+                        const statusInfo = deliverableStatusMeta(del.status);
                         const deal = dealMap.get(del.partnership_id);
-                        const canSubmit = actionable && (del.status === "pending" || del.status === "rejected");
+                        const canSubmit = actionable && isAwaitingSubmission(del.status);
                         return (
                           <div key={del.id} className="flex items-start gap-4 px-6 py-5">
                             <div className="min-w-0 flex-1">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { reconcileDealPayments, type ResumablePayment } from "@/lib/deals/paymentReconcile";
 import { getStripe } from "@/lib/stripe";
 import { computeNumMonths, installmentAmountCents } from "@/lib/deals/types";
 
@@ -48,6 +49,21 @@ export async function POST(
   }
 
   const service = createServiceClient();
+
+  /* Reconcile BEFORE the pre-checks below. They refuse a payment when any row for this deal
+   * is still `pending`/`processing`, and nothing used to clear those — so one abandoned
+   * checkout permanently blocked that installment with 409 "A payment is already in
+   * progress". Now a stale row is resolved against Stripe first, and a genuinely open
+   * session comes back as resumable instead of as an obstruction. */
+  let resumable: ResumablePayment[] = [];
+  try {
+    resumable = await reconcileDealPayments(service, id);
+  } catch (err) {
+    // Reconciliation is a recovery mechanism, not a precondition. If Stripe is unreachable
+    // the pre-checks still run against unreconciled data, exactly as they did before.
+    console.error("pay: reconcile failed for deal %s:", id, err);
+  }
+
   let amountCents: number;
   let deliverableId: string | null = null;
   let installmentNumber: number | null = null;
@@ -65,15 +81,14 @@ export async function POST(
       .limit(1)
       .maybeSingle();
     if (existing) {
-      return NextResponse.json(
-        {
-          error:
-            existing.status === "paid"
-              ? "This deal has already been paid."
-              : "A payment is already in progress.",
-        },
-        { status: 409 }
-      );
+      if (existing.status === "paid") {
+        return NextResponse.json({ error: "This deal has already been paid." }, { status: 409 });
+      }
+      // Still open in Stripe: hand back the existing session rather than refusing. The
+      // brand lands back in the checkout they abandoned, which is what they wanted.
+      const resume = resumable.find((r) => r.paymentId === existing.id);
+      if (resume) return NextResponse.json({ url: resume.resumeUrl });
+      return NextResponse.json({ error: "A payment is already in progress." }, { status: 409 });
     }
     amountCents = Math.round(deal.total_value * 100);
 
@@ -98,13 +113,16 @@ export async function POST(
       .in("status", ["pending", "processing", "paid"])
       .maybeSingle();
     if (existingInstallment) {
+      if (existingInstallment.status === "paid") {
+        return NextResponse.json(
+          { error: `Installment ${installmentNumber} has already been paid.` },
+          { status: 409 }
+        );
+      }
+      const resume = resumable.find((r) => r.paymentId === existingInstallment.id);
+      if (resume) return NextResponse.json({ url: resume.resumeUrl });
       return NextResponse.json(
-        {
-          error:
-            existingInstallment.status === "paid"
-              ? `Installment ${installmentNumber} has already been paid.`
-              : "A payment for this installment is already in progress.",
-        },
+        { error: "A payment for this installment is already in progress." },
         { status: 409 }
       );
     }
@@ -140,13 +158,16 @@ export async function POST(
       .in("status", ["pending", "processing", "paid"])
       .maybeSingle();
     if (existingPayment) {
+      if (existingPayment.status === "paid") {
+        return NextResponse.json(
+          { error: "This deliverable has already been paid." },
+          { status: 409 }
+        );
+      }
+      const resume = resumable.find((r) => r.paymentId === existingPayment.id);
+      if (resume) return NextResponse.json({ url: resume.resumeUrl });
       return NextResponse.json(
-        {
-          error:
-            existingPayment.status === "paid"
-              ? "This deliverable has already been paid."
-              : "A payment for this deliverable is already in progress.",
-        },
+        { error: "A payment for this deliverable is already in progress." },
         { status: 409 }
       );
     }
@@ -240,8 +261,11 @@ export async function POST(
         installment_number: String(installmentNumber ?? ""),
         supabase_user_id: user.id,
       },
-      success_url: `${siteUrl}/dashboard/brand-dashboard/deals/${id}?payment=success`,
-      cancel_url: `${siteUrl}/dashboard/brand-dashboard/deals/${id}?payment=cancelled`,
+      // Both land on the reconciling return route, which resolves the payment against
+      // Stripe's own session state before redirecting to the deal page. Going straight to
+      // the page meant the success banner could appear while the row was still `processing`.
+      success_url: `${siteUrl}/api/deals/${id}/pay/return?outcome=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteUrl}/api/deals/${id}/pay/return?outcome=cancel&session_id={CHECKOUT_SESSION_ID}`,
     });
 
     await service

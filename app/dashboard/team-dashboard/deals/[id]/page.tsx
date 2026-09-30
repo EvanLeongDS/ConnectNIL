@@ -10,6 +10,8 @@ import {
   resolveDealParticipants,
 } from "@/lib/athletes/visibility";
 import {
+  deliverableStatusMeta,
+  isAwaitingSubmission,
   DealRow,
   DealPaymentRow,
   DeliverableRow,
@@ -20,15 +22,9 @@ import {
   DEAL_CATEGORY_LABELS,
   PAYMENT_TYPE_LABELS,
   formatCurrency,
+  formatCents,
   formatDate,
 } from "@/lib/deals/types";
-
-const DELIVERABLE_STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-  pending:   { label: "Pending",   cls: "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-400" },
-  submitted: { label: "Submitted", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-400" },
-  approved:  { label: "Approved",  cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-400" },
-  rejected:  { label: "Rejected",  cls: "bg-red-50 text-red-600 dark:bg-red-900/25 dark:text-red-400" },
-};
 
 function normalizeFrequency(f: string | null | undefined): DeliverableFrequency {
   if (f === "daily" || f === "weekly" || f === "monthly" || f === "season" || f === "one_time") return f;
@@ -233,7 +229,7 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
                 <ol className="space-y-4">
                   {deliverables.map((del, i) => {
                     const freq = normalizeFrequency(del.frequency);
-                    const statusInfo = DELIVERABLE_STATUS_LABELS[del.status] ?? DELIVERABLE_STATUS_LABELS.pending;
+                    const statusInfo = deliverableStatusMeta(del.status);
                     return (
                       <li key={del.id} className="flex gap-3 text-sm">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1f7ae0]/10 text-xs font-bold text-[#1f7ae0]">
@@ -271,7 +267,7 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
                             analysis={del.proof_analysis}
                             className="mt-2"
                           />
-                          {isActive && (del.status === "pending" || del.status === "rejected") && (
+                          {isActive && isAwaitingSubmission(del.status) && (
                             <div className="mt-2">
                               <Link
                                 href={proofHref(del.id)}
@@ -428,7 +424,7 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
                 <div>
                   <p className="text-sm text-black/50 dark:text-white/40">Received so far</p>
                   <p className="text-xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(d.paid_cents / 100)}
+                    {formatCents(d.paid_cents)}
                   </p>
                 </div>
                 <span
@@ -464,7 +460,7 @@ export default async function TeamDealDetailPage({ params, searchParams }: Props
                         · {formatDate(p.paid_at)}
                       </p>
                       <span className="text-sm font-semibold text-black dark:text-white">
-                        {formatCurrency(p.net_cents / 100)}
+                        {formatCents(p.net_cents)}
                         <span className="ml-1 text-xs font-normal text-black/40 dark:text-white/35">
                           (net)
                         </span>

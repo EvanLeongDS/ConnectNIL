@@ -20,7 +20,7 @@ const STATUS_GROUPS: DealStatus[] = ["pending", "active", "completed", "cancelle
 export default async function BrandDealsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string }>;
+  searchParams: Promise<{ sent?: string; warn?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -48,6 +48,7 @@ export default async function BrandDealsPage({
 
   const params = await searchParams;
   const justSent = params.sent === "1";
+  const participantsWarning = params.warn === "participants";
 
   const name =
     profile.company_name ||
@@ -88,6 +89,19 @@ export default async function BrandDealsPage({
         {justSent && (
           <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-900/20 dark:text-emerald-400">
             Deal proposal sent! The team manager will review it shortly.
+          </div>
+        )}
+
+        {/* The deal itself is fine and the team manager can review it — only the per-athlete
+            opt-in rows failed. Athletes still reach it through their team, so this is a
+            notice rather than an error, but it must not be silent. */}
+        {participantsWarning && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800/50 dark:bg-amber-900/20 dark:text-amber-200">
+            <p className="font-semibold">Athletes were not individually invited</p>
+            <p className="mt-1">
+              The deal was created and the team manager can review it, but we could not add
+              the roster&apos;s athletes to it. They will still see it through their team.
+            </p>
           </div>
         )}
 
